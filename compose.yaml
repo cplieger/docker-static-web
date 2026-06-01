@@ -1,0 +1,13 @@
+services:
+  static-web:
+    image: ghcr.io/cplieger/docker-static-web:latest
+    container_name: static-web
+    restart: unless-stopped
+
+    ports:
+      - "8567:8567"
+
+    # Serve a read-only document root. The image runs darkhttpd from /www
+    # (see Dockerfile CMD) on a `scratch` base — no shell, tiny footprint.
+    volumes:
+      - ./www:/www:ro
