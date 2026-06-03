@@ -1,24 +1,14 @@
 name: CI
 
 on:
-  pull_request:
-    branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "LICENSE"
-      - ".gitignore"
   push:
     branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "LICENSE"
-      - ".gitignore"
+    paths-ignore: ["**/*.md", "LICENSE", ".gitignore"]
+  pull_request:
+    branches: [main]
+    paths-ignore: ["**/*.md", "LICENSE", ".gitignore"]
   workflow_dispatch:
 
 jobs:
   ci:
-    uses: cplieger/ci/.github/workflows/shell-ci.yaml@2c6289a7dee062be6411c1cd0d3ab4f784d75f1e # v1
-    with:
-      # No shell scripts in this repo; /dev/null keeps shellcheck a no-op
-      # while hadolint still lints the Dockerfile.
-      shellcheck-paths: "/dev/null"
+    uses: cplieger/ci/.github/workflows/shell-ci.yaml@e43ece37b63835a7531016d100b5e2912e420541 # v1
