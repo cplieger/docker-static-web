@@ -30,6 +30,8 @@ This is the smallest viable container for serving static content. Use it for:
 
 ## Quick start
 
+Available from both `ghcr.io/cplieger/docker-static-web` and `docker.io/cplieger/docker-static-web` — identical images and tags.
+
 ```yaml
 services:
   static-web:
