@@ -25,7 +25,8 @@ This is the smallest viable container for serving static content. Use it for:
 - **Scratch base** — image is essentially the binary itself. No shell to exec, no package manager to attack
 - **UPX-compressed binary** — runtime memory is tiny; the binary unpacks itself in-process
 - **Hardening flags** — `-D_FORTIFY_SOURCE=2`, `-fstack-clash-protection`, `-fstack-protector-strong`, RELRO + BIND_NOW + NOEXEC stack at link time
-- **Static linking** — `--static` so the binary has zero dependencies, runs identically on amd64 and arm64
+- **Static-PIE linking** — `-static-pie` (with `-fPIE`) so the binary has zero dependencies and runs identically on amd64 and arm64, while keeping ASLR for the main executable
+- **Non-root by default** — runs as `USER 65534:65534` (nobody); binds a high port and only reads files, so it never needs root. Override via compose `user:`
 - **Sane darkhttpd defaults** — `--maxconn 128 --no-listing --no-server-id`: connection cap to limit DoS impact, no directory indexes, no `Server:` header leaking the version
 - **Tarball integrity check** — Dockerfile pins `DARKHTTPD_SHA256` so a tampered tarball fails the build
 
@@ -93,6 +94,46 @@ services:
 
 See [`darkhttpd --help`](https://unix4lyfe.org/darkhttpd/) for all available flags.
 
+### Running as non-root
+
+The image runs as a non-root user by default: the Dockerfile sets `USER 65534:65534` (the `nobody:nogroup` numeric uid:gid — numeric because `scratch` has no `/etc/passwd`). darkhttpd binds a high port (8567) and only reads files, so it never needs root. A plain `docker run` is non-root automatically.
+
+To run as a different uid:gid, set `user:` in compose — the compose value overrides the image default, no rebuild needed:
+
+```yaml
+services:
+  static-web:
+    image: ghcr.io/cplieger/docker-static-web:latest
+    user: "1000:1000"
+    volumes:
+      - ./www:/www:ro
+```
+
+Whatever uid you pick must have read access to the files mounted at `/www`.
+
+### Logging and log rotation
+
+darkhttpd writes one Common Log Format line per request to stdout. Docker's default `json-file` driver does **not** rotate, so on a busy server the logs can grow until they fill the host disk. Log rotation is a runtime/daemon setting and cannot be baked into the image — set it in compose (or in the daemon's `log-opts`):
+
+```yaml
+services:
+  static-web:
+    image: ghcr.io/cplieger/docker-static-web:latest
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    volumes:
+      - ./www:/www:ro
+```
+
+If a reverse proxy in front (e.g. Caddy) already records access logs, you can instead silence darkhttpd's request log entirely by appending `--no-log` to the command:
+
+```yaml
+    command: [".", "--port", "8567", "--maxconn", "128", "--no-listing", "--no-server-id", "--no-log"]
+```
+
 ## Healthcheck
 
 **No built-in healthcheck.** The scratch base has no shell, no `wget`, no `curl`, no `nc`. Docker can't run a healthcheck inside the container without one of those.
@@ -125,7 +166,7 @@ If you need any of these, use Caddy / nginx / a real web server.
 
 The image is published with [cosign](https://github.com/sigstore/cosign) signatures and SBOM attestations.
 
-The build pins `DARKHTTPD_SHA256` and verifies the upstream tarball before extracting. **When Renovate bumps `DARKHTTPD_VERSION`**, you must manually update `DARKHTTPD_SHA256` in the same PR — Renovate is configured to require manual approval for darkhttpd bumps for exactly this reason. Compute the new hash with:
+The build pins `DARKHTTPD_SHA256` and verifies the upstream tarball before extracting. **When Renovate bumps `DARKHTTPD_VERSION`**, you must manually update `DARKHTTPD_SHA256` in the same PR — Renovate bumps only the version, not the hash, so the bump PR fails the `sha256sum -c` integrity check until you update the SHA by hand. Compute the new hash with:
 
 ```bash
 curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz | sha256sum
