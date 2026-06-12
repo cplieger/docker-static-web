@@ -137,7 +137,7 @@ The image is essentially just the binary (see the Image Size badge at the top) â
 
 ## Dependencies
 
-All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate) and pinned by digest or version for reproducibility.
+All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate). The base image is pinned by SHA digest and `darkhttpd` by tag + SHA-256; the `build-base`/`upx` build packages are installed unpinned so they track the digest-pinned base.
 
 | Dependency | Source |
 |------------|--------|
