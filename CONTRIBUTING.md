@@ -22,8 +22,10 @@ contributions are build/Dockerfile changes. A few things are easy to trip over.
 The `Dockerfile` pins both `DARKHTTPD_VERSION` and `DARKHTTPD_SHA256`, and
 verifies the tarball with `sha256sum -c` before extracting. **When you change
 `DARKHTTPD_VERSION`, you must update `DARKHTTPD_SHA256` in the same change** —
-otherwise the build fails the integrity check. Renovate is deliberately
-configured to require manual approval on darkhttpd bumps for this reason.
+otherwise the build fails the integrity check. Renovate bumps only the version
+ARG (the SHA has no `# renovate:` annotation), so an automated darkhttpd bump PR
+carries a stale hash and fails that check until the SHA is updated by hand;
+there is no manual-approval gate holding it back.
 
 Compute the new hash with:
 
@@ -49,6 +51,10 @@ eslint guidance does not apply):
 hadolint Dockerfile
 ```
 
+`DL3018` (unpinned `apk add` for `build-base`/`upx`) is intentionally ignored
+inline in the `Dockerfile` — those packages are build-only and never ship (see
+Conventions), so don't add a version pin or a hadolint config to silence it.
+
 Smoke-test the running image with an off-host probe. The `scratch` base has no
 shell, `wget`, `curl`, or `nc`, so you cannot exec a check inside the
 container — probe it from the host:
@@ -65,11 +71,17 @@ curl -sf http://localhost:8567/ -o /dev/null && echo OK
   `CMD`), not env vars.
 - The `CFLAGS` / `LDFLAGS` hardening set (`-D_FORTIFY_SOURCE=2`,
   `-fstack-clash-protection`, `-fstack-protector-strong`, RELRO + BIND_NOW +
-  NOEXEC stack) and `--static` linking are intentional. Don't drop them
-  casually — they keep the binary dependency-free and identical across
-  amd64/arm64.
-- Pin new build dependencies by version or digest, matching the existing
-  Alpine package and base-image pins.
+  NOEXEC stack) and `-static-pie` (with `-fPIE`) linking are intentional. Don't
+  drop them casually — they keep the binary dependency-free, ASLR-enabled, and
+  identical across amd64/arm64.
+- The image runs non-root by default (`USER 65534:65534`). Keep it that way —
+  darkhttpd needs no root (high port, read-only); compose `user:` can override
+  it at runtime.
+- Match the existing dependency-pinning scheme: the base image is pinned by
+  digest and darkhttpd by version + SHA-256. The build-only `build-base`/`upx`
+  packages are intentionally left unpinned (they never reach the scratch final
+  image) — `DL3018` is ignored inline for exactly this reason, so don't add a
+  version pin to "fix" it.
 
 ## Commits and PRs
 
