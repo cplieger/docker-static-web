@@ -8,7 +8,7 @@ ARG DARKHTTPD_VERSION=v1.17
 ARG DARKHTTPD_SHA256=4fee9927e2d8bb0a302f0dd62f9ff1e075748fa9f5162c9481a7a58b41462b56
 
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
-RUN apk add --no-cache build-base=0.5-r3 upx=5.0.2-r0 \
+RUN apk add --no-cache build-base=0.5-r4 upx=5.2.0-r0 \
  && wget -q --tries=3 --timeout=30 \
     "https://github.com/emikulic/darkhttpd/archive/refs/tags/${DARKHTTPD_VERSION}.tar.gz" \
  && echo "${DARKHTTPD_SHA256}  ${DARKHTTPD_VERSION}.tar.gz" | sha256sum -c - \
