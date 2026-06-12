@@ -11,7 +11,7 @@ A static file server in **~30 KB**: [darkhttpd](https://github.com/emikulic/dark
 
 ## What it does
 
-Serves static files over HTTP. That's it. The image is essentially a single ~30 KB binary on a scratch base — no shell, no libc, no package manager, no auth, no TLS, no fancy config. Mount your document root at `/www` and darkhttpd serves it on port `8567`.
+Serves static files over HTTP. That's it. The image is essentially a single tiny binary on a scratch base — no shell, no libc, no package manager, no auth, no TLS, no fancy config. Mount your document root at `/www` and darkhttpd serves it on port `8567`.
 
 This is the smallest viable container for serving static content. Use it for:
 
@@ -22,7 +22,7 @@ This is the smallest viable container for serving static content. Use it for:
 
 ### Why this design
 
-- **Scratch base** — image is essentially the binary itself, ~30 KB compressed. No shell to exec, no package manager to attack
+- **Scratch base** — image is essentially the binary itself. No shell to exec, no package manager to attack
 - **UPX-compressed binary** — runtime memory is tiny; the binary unpacks itself in-process
 - **Hardening flags** — `-D_FORTIFY_SOURCE=2`, `-fstack-clash-protection`, `-fstack-protector-strong`, RELRO + BIND_NOW + NOEXEC stack at link time
 - **Static linking** — `--static` so the binary has zero dependencies, runs identically on amd64 and arm64
@@ -133,18 +133,18 @@ curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz | s
 
 ## Image size
 
-The image is roughly 30 KB compressed (see the badge at the top). The binary is the entire image — there's no Alpine layer, no `/etc`, no `/lib`, nothing else. `docker run --rm ghcr.io/cplieger/docker-static-web ls /` won't work (no `ls` in `scratch`).
+The image is essentially just the binary (see the Image Size badge at the top) — there's no Alpine layer, no `/etc`, no `/lib`, nothing else. `docker run --rm ghcr.io/cplieger/docker-static-web ls /` won't work (no `ls` in `scratch`).
 
 ## Dependencies
 
 All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate) and pinned by digest or version for reproducibility.
 
-| Dependency | Version | Source |
-|------------|---------|--------|
-| alpine (builder) | `3.23.4` | [Docker Hub](https://hub.docker.com/_/alpine) |
-| build-base | `0.5-r3` (Alpine 3.23 meta-package) | [Alpine](https://pkgs.alpinelinux.org/package/v3.23/main/x86_64/build-base) |
-| upx | `5.0.2-r0` (Alpine 3.23 package) | [Alpine](https://pkgs.alpinelinux.org/package/v3.23/main/x86_64/upx) |
-| darkhttpd | `v1.17` | [GitHub](https://github.com/emikulic/darkhttpd) |
+| Dependency | Source |
+|------------|--------|
+| alpine (builder) | [Docker Hub](https://hub.docker.com/_/alpine) |
+| build-base | [Alpine](https://pkgs.alpinelinux.org/packages?name=build-base) |
+| upx | [Alpine](https://pkgs.alpinelinux.org/packages?name=upx) |
+| darkhttpd | [GitHub](https://github.com/emikulic/darkhttpd) |
 
 ## Credits
 
