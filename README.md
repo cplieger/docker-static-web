@@ -1,10 +1,12 @@
 # docker-static-web
 
-![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)
+[![CI](https://github.com/cplieger/docker-static-web/actions/workflows/ci.yaml/badge.svg)](https://github.com/cplieger/docker-static-web/actions/workflows/ci.yaml)
 [![GitHub release](https://img.shields.io/github/v/release/cplieger/docker-static-web)](https://github.com/cplieger/docker-static-web/releases)
 [![Image Size](https://ghcr-badge.egpl.dev/cplieger/docker-static-web/size)](https://github.com/cplieger/docker-static-web/pkgs/container/docker-static-web)
 ![Platforms](https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-blue)
 ![base: scratch](https://img.shields.io/badge/base-scratch-2496ED?logo=docker)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cplieger/docker-static-web/badge)](https://scorecard.dev/viewer/?uri=github.com/cplieger/docker-static-web)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
 A static file server in **~30 KB**: [darkhttpd](https://github.com/emikulic/darkhttpd) compiled statically with hardening flags, UPX-compressed, on `scratch`.
 
