@@ -32,9 +32,22 @@ RUN make darkhttpd \
  && strip --strip-all darkhttpd \
  && upx --best --lzma darkhttpd
 
+# ---------------------------------------------------------------------------
+# Test stage — runs the build-time smoke test against the final (stripped,
+# UPX-compressed) binary: it serves a file end-to-end, proving the static-PIE
+# link and UPX packing produced a working executable. A failure here fails the
+# centralized `ci / validate` docker build gate, because the scratch final
+# stage depends on this stage's marker. The builder base has busybox wget.
+# ---------------------------------------------------------------------------
+FROM builder AS test
+COPY tests/ /tmp/tests/
+RUN sh /tmp/tests/smoke.sh && touch /tests-passed
+
 FROM scratch
 
 COPY --from=builder /src/darkhttpd /darkhttpd
+# 0-byte marker carried over only to force the test stage to build and pass.
+COPY --from=test /tests-passed /tests-passed
 
 WORKDIR /www
 EXPOSE 8567
