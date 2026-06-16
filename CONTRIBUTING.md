@@ -23,9 +23,14 @@ The `Dockerfile` pins both `DARKHTTPD_VERSION` and `DARKHTTPD_SHA256`, and
 verifies the tarball with `sha256sum -c` before extracting. **When you change
 `DARKHTTPD_VERSION`, you must update `DARKHTTPD_SHA256` in the same change** —
 otherwise the build fails the integrity check. Renovate bumps only the version
-ARG (the SHA has no `# renovate:` annotation), so an automated darkhttpd bump PR
-carries a stale hash and fails that check until the SHA is updated by hand;
-there is no manual-approval gate holding it back.
+ARG and cannot recompute the tarball hash (the `github-tags` datasource exposes
+the git commit sha, not the archive's content hash, and the hosted Renovate app
+does not run `postUpgradeTasks`), so an automated darkhttpd bump PR carries a
+stale hash and fails that check until the SHA is updated by hand; there is no
+manual-approval gate holding it back. To make the fix a single mechanical step,
+the repo `renovate.json` labels the bump PR `manual-sha-bump` and embeds the
+recompute command in the PR body. Once you push the corrected SHA the build goes
+green and the PR auto-merges.
 
 Compute the new hash with:
 

@@ -1,1 +1,13 @@
-{ "extends": ["github>cplieger/.github"] }
+{
+  "extends": ["github>cplieger/.github"],
+  "packageRules": [
+    {
+      "description": "darkhttpd is pinned by version AND a tarball content hash (DARKHTTPD_SHA256) that Renovate cannot recompute on its own: the inherited github-tags manager discovers the version, but github-tags only exposes the git commit sha, not the sha256 of the auto-generated archive that `sha256sum -c` verifies, and the hosted Renovate app does not run postUpgradeTasks. So a version-bump PR carries a stale SHA and fails the integrity check until a human updates it. Label the PR and ship the exact recompute command in its body so the residual manual step is one copy-paste rather than a hunt. Automerge is intentionally left inherited (on): once the SHA is corrected and the build goes green, the PR merges on its own.",
+      "matchPackageNames": ["emikulic/darkhttpd"],
+      "addLabels": ["manual-sha-bump"],
+      "prBodyNotes": [
+        ":warning: **Manual step required — update `DARKHTTPD_SHA256`.** This bump changes `DARKHTTPD_VERSION` only. Renovate cannot recompute the tarball hash, so the build will fail `sha256sum -c` until you update `DARKHTTPD_SHA256` in the `Dockerfile` on this branch. Recompute it with:\n\n```sh\ncurl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/{{{newValue}}}.tar.gz | sha256sum\n```\n\nReplace the `DARKHTTPD_SHA256` value with the printed hash and push to this branch; the PR will go green and auto-merge."
+      ]
+    }
+  ]
+}

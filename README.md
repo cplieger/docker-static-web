@@ -166,7 +166,7 @@ If you need any of these, use Caddy / nginx / a real web server.
 
 The image is published with [cosign](https://github.com/sigstore/cosign) signatures and SBOM attestations.
 
-The build pins `DARKHTTPD_SHA256` and verifies the upstream tarball before extracting. **When Renovate bumps `DARKHTTPD_VERSION`**, you must manually update `DARKHTTPD_SHA256` in the same PR — Renovate bumps only the version, not the hash, so the bump PR fails the `sha256sum -c` integrity check until you update the SHA by hand. Compute the new hash with:
+The build pins `DARKHTTPD_SHA256` and verifies the upstream tarball before extracting. **When Renovate bumps `DARKHTTPD_VERSION`**, you must update `DARKHTTPD_SHA256` in the same PR — Renovate can't recompute the tarball hash (the `github-tags` datasource exposes the git commit sha, not the archive's content hash), so the bump PR fails the `sha256sum -c` integrity check until you update the SHA by hand. To make that one mechanical step, Renovate labels the bump PR `manual-sha-bump` and embeds the exact recompute command in the PR body. Compute the new hash with:
 
 ```bash
 curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz | sha256sum
