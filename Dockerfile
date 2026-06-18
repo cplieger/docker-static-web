@@ -40,17 +40,28 @@ ENV LDFLAGS="-static-pie -Wl,-z,defs -Wl,-z,now -Wl,-z,relro -Wl,-z,noexecstack"
 # stack-protector) become enforced instead of aspirational. binutils is
 # build-only and never reaches the scratch final image, matching the existing
 # build-base/upx pattern.
+#
+# readelf output is written to a file and then grepped, NOT piped into
+# `grep -q`: `grep -q` exits at the first match and closes the pipe, so the
+# large `readelf -sW` symbol-table dump dies on SIGPIPE writing to it, which
+# `pipefail` (set via SHELL above) turns into a spurious exit 141 even though
+# the symbol was found. Grepping a regular file has no pipe and no race.
 # hadolint ignore=DL3018
 RUN apk add --no-cache binutils \
  && make darkhttpd \
  # stack-protector lives in .symtab; verify BEFORE strip removes the symbol
- # table, otherwise this grep can never match and breaks the build.
- && readelf -sW darkhttpd | grep -q '__stack_chk_fail' \
+ # table, otherwise the symbol can never be found and the build breaks.
+ && readelf -sW darkhttpd > /tmp/elf-syms \
+ && grep -q '__stack_chk_fail' /tmp/elf-syms \
  && strip --strip-all darkhttpd \
- && readelf -hW darkhttpd | grep -q 'Type:.*DYN' \
- && readelf -dW darkhttpd | grep -q 'BIND_NOW' \
- && readelf -lW darkhttpd | grep -q 'GNU_RELRO' \
- && ! readelf -lW darkhttpd | grep 'GNU_STACK' | grep -q 'RWE' \
+ && readelf -hW darkhttpd > /tmp/elf-hdr \
+ && grep -q 'Type:.*DYN' /tmp/elf-hdr \
+ && readelf -dW darkhttpd > /tmp/elf-dyn \
+ && grep -q 'BIND_NOW' /tmp/elf-dyn \
+ && readelf -lW darkhttpd > /tmp/elf-seg \
+ && grep -q 'GNU_RELRO' /tmp/elf-seg \
+ && ! grep 'GNU_STACK' /tmp/elf-seg | grep -q 'RWE' \
+ && rm -f /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
  && upx --best --lzma darkhttpd
 
 # ---------------------------------------------------------------------------
