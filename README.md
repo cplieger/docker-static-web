@@ -61,15 +61,15 @@ static.example.com {
 
 ### Volumes
 
-| Mount | Description |
-|-------|-------------|
+| Mount  | Description                                                       |
+| ------ | ----------------------------------------------------------------- |
 | `/www` | Document root. Mount read-only. darkhttpd serves files from here. |
 
 ### Ports
 
-| Port | Protocol | Purpose |
-|------|----------|---------|
-| `8567` | TCP | HTTP — change in `command:` if you want a different port |
+| Port   | Protocol | Purpose                                                  |
+| ------ | -------- | -------------------------------------------------------- |
+| `8567` | TCP      | HTTP — change in `command:` if you want a different port |
 
 ### Default command
 
@@ -158,11 +158,11 @@ If you need any of these, use Caddy / nginx / a real web server.
 
 ## Security
 
-| Tool | Result |
-|------|--------|
-| [hadolint](https://github.com/hadolint/hadolint) | Clean |
-| [gitleaks](https://github.com/gitleaks/gitleaks) | No secrets detected |
-| [trivy](https://trivy.dev/) | 0 vulnerabilities (scratch base, no OS packages to scan) |
+| Tool                                             | Result                                                   |
+| ------------------------------------------------ | -------------------------------------------------------- |
+| [hadolint](https://github.com/hadolint/hadolint) | Clean                                                    |
+| [gitleaks](https://github.com/gitleaks/gitleaks) | No secrets detected                                      |
+| [trivy](https://trivy.dev/)                      | 0 vulnerabilities (scratch base, no OS packages to scan) |
 
 The image is published with [cosign](https://github.com/sigstore/cosign) signatures and SBOM attestations.
 
@@ -180,12 +180,12 @@ The image is essentially just the binary (see the Image Size badge at the top) �
 
 All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate). The base image is pinned by SHA digest and `darkhttpd` by tag + SHA-256; the `build-base`/`upx` build packages are installed unpinned so they track the digest-pinned base.
 
-| Dependency | Source |
-|------------|--------|
-| alpine (builder) | [Docker Hub](https://hub.docker.com/_/alpine) |
-| build-base | [Alpine](https://pkgs.alpinelinux.org/packages?name=build-base) |
-| upx | [Alpine](https://pkgs.alpinelinux.org/packages?name=upx) |
-| darkhttpd | [GitHub](https://github.com/emikulic/darkhttpd) |
+| Dependency       | Source                                                          |
+| ---------------- | --------------------------------------------------------------- |
+| alpine (builder) | [Docker Hub](https://hub.docker.com/_/alpine)                   |
+| build-base       | [Alpine](https://pkgs.alpinelinux.org/packages?name=build-base) |
+| upx              | [Alpine](https://pkgs.alpinelinux.org/packages?name=upx)        |
+| darkhttpd        | [GitHub](https://github.com/emikulic/darkhttpd)                 |
 
 ## Credits
 
