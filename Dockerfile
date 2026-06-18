@@ -31,8 +31,26 @@ ENV CFLAGS="-fPIE -O2 -flto -D_FORTIFY_SOURCE=2 \
   -Wall -Werror=format-security \
   -Werror=implicit-function-declaration"
 ENV LDFLAGS="-static-pie -Wl,-z,defs -Wl,-z,now -Wl,-z,relro -Wl,-z,noexecstack"
-RUN make darkhttpd \
+# The stack-protector symbol check runs on the unstripped binary; the four
+# program-header / .dynamic checks run after strip (strip preserves those, so
+# they still see the real hardened ELF). upx then rewrites it into a packed
+# stub. Each grep is fail-closed: a dropped protection breaks the chained
+# `&&` and fails the centralized `ci / validate` docker-build gate, so the
+# README/steering hardening claims (static-PIE, RELRO/BIND_NOW, noexec stack,
+# stack-protector) become enforced instead of aspirational. binutils is
+# build-only and never reaches the scratch final image, matching the existing
+# build-base/upx pattern.
+# hadolint ignore=DL3018
+RUN apk add --no-cache binutils \
+ && make darkhttpd \
+ # stack-protector lives in .symtab; verify BEFORE strip removes the symbol
+ # table, otherwise this grep can never match and breaks the build.
+ && readelf -sW darkhttpd | grep -q '__stack_chk_fail' \
  && strip --strip-all darkhttpd \
+ && readelf -hW darkhttpd | grep -q 'Type:.*DYN' \
+ && readelf -dW darkhttpd | grep -q 'BIND_NOW' \
+ && readelf -lW darkhttpd | grep -q 'GNU_RELRO' \
+ && ! readelf -lW darkhttpd | grep 'GNU_STACK' | grep -q 'RWE' \
  && upx --best --lzma darkhttpd
 
 # ---------------------------------------------------------------------------

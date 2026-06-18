@@ -17,27 +17,26 @@ fail=0
 log() { printf '%s\n' "$*"; }
 
 root=$(mktemp -d)
-printf 'smoke-ok\n' >"$root/index.html"
+trap 'kill "${pid:-}" 2> /dev/null || true; rm -rf "$root"' EXIT
+printf 'smoke-ok\n' > "$root/index.html"
 
-"$BIN" "$root" --port 8567 --addr 127.0.0.1 >/dev/null 2>&1 &
+"$BIN" "$root" --port 8567 --addr 127.0.0.1 > /dev/null 2>&1 &
 pid=$!
 
 # Poll until the listener answers (bounded), then fetch the file.
 body=''
 i=0
 while [ "$i" -lt 25 ]; do
-	if body=$(wget -qO- http://127.0.0.1:8567/index.html 2>/dev/null); then
-		break
-	fi
-	i=$((i + 1))
-	sleep 0.2
+  if body=$(wget -qO- http://127.0.0.1:8567/index.html 2> /dev/null); then
+    break
+  fi
+  i=$((i + 1))
+  sleep 0.2
 done
 
-kill "$pid" 2>/dev/null || true
-
 if [ "$body" != "smoke-ok" ]; then
-	log "FAIL: darkhttpd did not serve the expected body (got: '$body')"
-	fail=1
+  log "FAIL: darkhttpd did not serve the expected body (got: '$body')"
+  fail=1
 fi
 
 [ "$fail" -eq 0 ] && log "static-web smoke: ok"

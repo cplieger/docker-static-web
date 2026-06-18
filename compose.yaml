@@ -7,6 +7,11 @@ services:
     ports:
       - "8567:8567"
 
+    # No in-container healthcheck: the scratch base has no shell, wget,
+    # curl, or nc for Docker to exec, so a HEALTHCHECK is impossible here.
+    # Probe from off-host instead (Gatus, Prometheus blackbox exporter,
+    # or `curl -sf http://host:8567/`), which also verifies the network path.
+
     # Serve a read-only document root. The image runs darkhttpd from /www
     # (see Dockerfile CMD) on a `scratch` base — no shell, tiny footprint.
     volumes:
