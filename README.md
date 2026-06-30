@@ -1,6 +1,6 @@
 # docker-static-web
 
-[![Image Size](https://ghcr-badge.egpl.dev/cplieger/docker-static-web/size)](https://github.com/cplieger/docker-static-web/pkgs/container/docker-static-web)
+[![Image Size](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/docker-static-web/badges/size.json)](https://github.com/cplieger/docker-static-web/pkgs/container/docker-static-web)
 ![Platforms](https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-blue)
 ![base: scratch](https://img.shields.io/badge/base-scratch-2496ED?logo=docker)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13211/badge)](https://www.bestpractices.dev/projects/13211)
