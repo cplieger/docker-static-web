@@ -1,3 +1,4 @@
+# Example compose for docker-static-web. See the README for all configuration options and hardening.
 services:
   static-web:
     image: ghcr.io/cplieger/docker-static-web:latest
@@ -7,19 +8,12 @@ services:
     ports:
       - "8567:8567"
 
-    # No in-container healthcheck: the scratch base has no shell, wget,
-    # curl, or nc for Docker to exec, so a HEALTHCHECK is impossible here.
-    # Probe from off-host instead (Gatus, Prometheus blackbox exporter,
-    # or `curl -sf http://host:8567/`), which also verifies the network path.
+    # No in-container healthcheck (scratch has no shell); probe off-host instead. See README.
 
-    # Serve a read-only document root. The image runs darkhttpd from /www
-    # (see Dockerfile CMD) on a `scratch` base — no shell, tiny footprint.
     volumes:
-      - ./www:/www:ro
+      - "./www:/www:ro"  # document root (read-only)
 
-    # Log rotation is a runtime setting (no Dockerfile equivalent). darkhttpd
-    # logs one CLF line per request to stdout; cap the json-file driver so
-    # request volume can't grow unbounded and fill the host disk.
+    # darkhttpd logs one line per request to stdout; cap the json-file driver.
     logging:
       driver: json-file
       options:
