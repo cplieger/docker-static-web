@@ -144,7 +144,7 @@ For external monitoring, use Uptime Kuma, Prometheus blackbox exporter, or any o
 curl -sf http://your-host:8567/ -o /dev/null && echo OK
 ```
 
-If you really need a Docker-level healthcheck, the typical pattern is to run a sidecar that hits the static-web container — but for most homelab uses, an external HTTP probe is simpler and more meaningful (it verifies the network path too).
+If you really need a Docker-level healthcheck, the typical pattern is to run a sidecar that hits the static-web container — but for most deployments, an external HTTP probe is simpler and more meaningful (it verifies the network path too).
 
 ## What it doesn't do
 
@@ -166,11 +166,7 @@ If you need any of these, use Caddy / nginx / a real web server.
 
 The image is published with [cosign](https://github.com/sigstore/cosign) signatures and SBOM attestations.
 
-The build pins `DARKHTTPD_SHA256` and verifies the upstream tarball before extracting. **When Renovate bumps `DARKHTTPD_VERSION`**, you must update `DARKHTTPD_SHA256` in the same PR — Renovate can't recompute the tarball hash (the `github-tags` datasource exposes the git commit sha, not the archive's content hash), so the bump PR fails the `sha256sum -c` integrity check until you update the SHA by hand. To make that one mechanical step, Renovate labels the bump PR `manual-sha-bump` and embeds the exact recompute command in the PR body. Compute the new hash with:
-
-```bash
-curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz | sha256sum
-```
+The build verifies the tarball SHA-256 before extracting, so a tampered tarball fails the build. Bumping `DARKHTTPD_VERSION` requires updating `DARKHTTPD_SHA256` in the same PR; see [CONTRIBUTING](CONTRIBUTING.md#bumping-darkhttpd-the-main-gotcha) for the bump workflow.
 
 ## Image size
 
@@ -197,7 +193,7 @@ Issues and pull requests are welcome. Please open an issue first for larger chan
 
 ## Disclaimer
 
-This image is built with care and follows security best practices, but it is intended for **homelab use**. No guarantees of fitness for production environments. Use at your own risk.
+This project is built with care and follows security best practices, but it is intended for personal / self-hosted use. No guarantees of fitness for production environments. Use at your own risk.
 
 This project was built with AI-assisted tooling using [Claude Opus](https://www.anthropic.com/claude) and [Kiro](https://kiro.dev). The human maintainer defines architecture, supervises implementation, and makes all final decisions.
 
