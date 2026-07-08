@@ -14,20 +14,24 @@ set -eu
 
 BIN="${DARKHTTPD_BIN:-/src/darkhttpd}"
 fail=0
-log() { printf '%s\n' "$*"; }
+log() { printf '%s\n' "$*"; }     # progress + final verdict -> stdout
+err() { printf '%s\n' "$*" >&2; } # failures + captured output -> stderr
 
 root=$(mktemp -d)
-trap 'kill "${pid:-}" 2> /dev/null || true; rm -rf "$root"' EXIT
-printf 'smoke-ok\n' > "$root/index.html"
+srv_log=$(mktemp)
+trap 'kill "${pid:-}" 2>/dev/null || true; rm -rf "$root" "$srv_log"' EXIT
+printf 'smoke-ok\n' >"$root/index.html"
 
-"$BIN" "$root" --port 8567 --addr 127.0.0.1 > /dev/null 2>&1 &
+# Capture darkhttpd's own output so a startup failure (bad static-PIE link or
+# UPX corruption) shows WHY on failure instead of only a bare empty body.
+"$BIN" "$root" --port 8567 --addr 127.0.0.1 >"$srv_log" 2>&1 &
 pid=$!
 
 # Poll until the listener answers (bounded), then fetch the file.
 body=''
 i=0
 while [ "$i" -lt 25 ]; do
-  if body=$(wget -qO- http://127.0.0.1:8567/index.html 2> /dev/null); then
+  if body=$(wget -qO- http://127.0.0.1:8567/index.html 2>/dev/null); then
     break
   fi
   i=$((i + 1))
@@ -35,7 +39,8 @@ while [ "$i" -lt 25 ]; do
 done
 
 if [ "$body" != "smoke-ok" ]; then
-  log "FAIL: darkhttpd did not serve the expected body (got: '$body')"
+  err "FAIL: darkhttpd did not serve the expected body (got: '$body')"
+  err "$(cat "$srv_log")"
   fail=1
 fi
 
