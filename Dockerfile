@@ -58,8 +58,10 @@ RUN apk add --no-cache binutils \
  && grep -q 'Type:.*DYN' /tmp/elf-hdr \
  && readelf -dW darkhttpd > /tmp/elf-dyn \
  && grep -q 'BIND_NOW' /tmp/elf-dyn \
+ && ! grep -q 'NEEDED' /tmp/elf-dyn \
  && readelf -lW darkhttpd > /tmp/elf-seg \
  && grep -q 'GNU_RELRO' /tmp/elf-seg \
+ && grep -q 'GNU_STACK' /tmp/elf-seg \
  && ! grep 'GNU_STACK' /tmp/elf-seg | grep -q 'RWE' \
  && rm -f /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
  && upx --best --lzma darkhttpd
@@ -69,17 +71,15 @@ RUN apk add --no-cache binutils \
 # UPX-compressed) binary: it serves a file end-to-end, proving the static-PIE
 # link and UPX packing produced a working executable. A failure here fails the
 # centralized `ci / validate` docker build gate, because the scratch final
-# stage depends on this stage's marker. The builder base has busybox wget.
+# stage copies the binary from this stage. The builder base has busybox wget.
 # ---------------------------------------------------------------------------
 FROM builder AS test
 COPY tests/ /tmp/tests/
-RUN sh /tmp/tests/smoke.sh && touch /tests-passed
+RUN sh /tmp/tests/smoke.sh
 
 FROM scratch
 
-COPY --from=builder /src/darkhttpd /darkhttpd
-# 0-byte marker carried over only to force the test stage to build and pass.
-COPY --from=test /tests-passed /tests-passed
+COPY --from=test /src/darkhttpd /darkhttpd
 
 WORKDIR /www
 EXPOSE 8567
