@@ -2,12 +2,18 @@
 # Build-time smoke test for docker-static-web.
 #
 # Runs in the Dockerfile `test` stage (FROM the builder, which has the compiled
-# binary + busybox wget), so the centralized `ci / validate` docker
-# build-ability gate executes it on every PR and push. Serves a file
-# end-to-end, which proves the statically linked, UPX-compressed darkhttpd
-# binary actually executes and serves — the real risk for this image (a bad
-# static-PIE link or UPX corruption produces a binary that fails only at
-# runtime, which the scratch final image cannot otherwise catch).
+# binary + busybox wget/nc), so the centralized `ci / validate` docker
+# build-ability gate executes it on every PR and push. Launches darkhttpd with
+# the image's shipped default flags and asserts, end-to-end against the
+# stripped, UPX-compressed binary, the behaviors the README advertises:
+#
+#   1. serves a file — proves the statically linked, UPX-compressed binary
+#      actually executes and serves (a bad static-PIE link or UPX corruption
+#      produces a binary that fails only at runtime, which the scratch final
+#      image cannot otherwise catch)
+#   2. --no-listing: a directory without an index must not leak its entries
+#   3. --no-server-id: responses must not carry a Server: header
+#   4. a malformed request must not kill the server
 #
 # Run locally:  DARKHTTPD_BIN=/path/to/darkhttpd sh tests/smoke.sh
 set -eu
@@ -21,13 +27,17 @@ root=$(mktemp -d)
 srv_log=$(mktemp)
 trap 'kill "${pid:-}" 2>/dev/null || true; rm -rf "$root" "$srv_log"' EXIT
 printf 'smoke-ok\n' >"$root/index.html"
+mkdir "$root/nolist"
+printf 'leak-check\n' >"$root/nolist/secret.txt"
 
 # Capture darkhttpd's own output so a startup failure (bad static-PIE link or
 # UPX corruption) shows WHY on failure instead of only a bare empty body.
-"$BIN" "$root" --port 8567 --addr 127.0.0.1 >"$srv_log" 2>&1 &
+# The flags mirror the image CMD so the test asserts the shipped defaults.
+"$BIN" "$root" --port 8567 --addr 127.0.0.1 \
+  --maxconn 128 --no-listing --no-server-id >"$srv_log" 2>&1 &
 pid=$!
 
-# Poll until the listener answers (bounded), then fetch the file.
+# --- 1. Happy path: poll until the listener answers (bounded), fetch the file.
 body=''
 i=0
 while [ "$i" -lt 25 ]; do
@@ -40,6 +50,41 @@ done
 
 if [ "$body" != "smoke-ok" ]; then
   err "FAIL: darkhttpd did not serve the expected body (got: '$body')"
+  err "$(cat "$srv_log")"
+  fail=1
+fi
+
+# --- 2. --no-listing: a directory with no index must not leak its entries.
+# darkhttpd 404s the request, so wget exits non-zero and the branch is skipped;
+# if the request ever succeeds, the body must not name the directory contents.
+if listing=$(wget -qO- http://127.0.0.1:8567/nolist/ 2>/dev/null); then
+  case "$listing" in
+    *secret.txt*)
+      err "FAIL: directory listing leaked filenames despite --no-listing"
+      fail=1
+      ;;
+  esac
+fi
+
+# --- 3. --no-server-id: the raw response must not carry a Server: header.
+# Fetch over nc so the headers are captured verbatim (no wget quiet-flag
+# interplay), and require the status line so a failed capture cannot
+# vacuously pass the grep below.
+resp=$(printf 'GET /index.html HTTP/1.0\r\n\r\n' | nc -w 2 127.0.0.1 8567 || true)
+if ! printf '%s\n' "$resp" | grep -q 'HTTP/1'; then
+  err "FAIL: could not capture response headers to verify --no-server-id"
+  fail=1
+elif printf '%s\n' "$resp" | grep -qi '^server:'; then
+  err "FAIL: response carries a Server: header despite --no-server-id"
+  err "$(printf '%s\n' "$resp" | head -10)"
+  fail=1
+fi
+
+# --- 4. Malformed request: the server must reject it and keep serving.
+printf 'not-a-http-request\r\n\r\n' | nc -w 2 127.0.0.1 8567 >/dev/null 2>&1 || true
+after=$(wget -qO- http://127.0.0.1:8567/index.html 2>/dev/null) || after=''
+if [ "$after" != "smoke-ok" ]; then
+  err "FAIL: server stopped serving after a malformed request"
   err "$(cat "$srv_log")"
   fail=1
 fi

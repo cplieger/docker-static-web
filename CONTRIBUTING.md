@@ -28,9 +28,10 @@ the git commit sha, not the archive's content hash, and the hosted Renovate app
 does not run `postUpgradeTasks`), so an automated darkhttpd bump PR carries a
 stale hash and fails that check until the SHA is updated by hand; there is no
 manual-approval gate holding it back. To make the fix a single mechanical step,
-the repo `renovate.json` labels the bump PR `manual-sha-bump` and embeds the
-recompute command in the PR body. Once you push the corrected SHA the build goes
-green and the PR auto-merges.
+a `packageRule` in the central `cplieger/.github` Renovate preset (this repo's
+`renovate.json` only extends it) labels the bump PR `manual-sha-bump` and embeds
+the recompute command in the PR body. Once you push the corrected SHA the build
+goes green and the PR auto-merges.
 
 Compute the new hash with:
 
