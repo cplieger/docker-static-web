@@ -27,7 +27,7 @@ This is the smallest viable container for serving static content. Use it for:
 - **Hardening flags** — `-D_FORTIFY_SOURCE=2`, `-fstack-clash-protection`, `-fstack-protector-strong`, RELRO + BIND_NOW + NOEXEC stack at link time
 - **Static-PIE linking** — `-static-pie` (with `-fPIE`) so the binary has zero dependencies and runs identically on amd64 and arm64, while keeping ASLR for the main executable
 - **Non-root by default** — runs as `USER 65534:65534` (nobody); binds a high port and only reads files, so it never needs root. Override via compose `user:`
-- **Sane darkhttpd defaults** — `--maxconn 128 --no-listing --no-server-id`: connection cap to limit DoS impact, no directory indexes, no `Server:` header leaking the version
+- **Sane darkhttpd defaults** — `--maxconn 128 --no-listing --no-server-id`: a bound on the listen backlog (`--maxconn` sets the `listen()` backlog, not a concurrent-connection cap — see [darkhttpd#9](https://github.com/emikulic/darkhttpd/issues/9); DoS limiting belongs to the reverse proxy in front), no directory indexes, no `Server:` header leaking the version
 - **Tarball integrity check** — Dockerfile pins `DARKHTTPD_SHA256` so a tampered tarball fails the build
 
 ## Quick start
@@ -94,6 +94,8 @@ services:
 
 See [`darkhttpd --help`](https://unix4lyfe.org/darkhttpd/) for all available flags.
 
+> **Note:** if you enable `--auth`, `--forward`, or `--forward-https`, be aware of [darkhttpd#94](https://github.com/emikulic/darkhttpd/issues/94) (header names are matched by substring anywhere in the request, so crafted header _values_ can spoof them). The default command enables none of these, which keeps the affected code paths inert.
+
 ### Running as non-root
 
 The image runs as a non-root user by default: the Dockerfile sets `USER 65534:65534` (the `nobody:nogroup` numeric uid:gid — numeric because `scratch` has no `/etc/passwd`). darkhttpd binds a high port (8567) and only reads files, so it never needs root. A plain `docker run` is non-root automatically.
@@ -136,7 +138,7 @@ If a reverse proxy in front (e.g. Caddy) already records access logs, you can in
 
 ## Healthcheck
 
-**No built-in healthcheck.** The scratch base has no shell, no `wget`, no `curl`, no `nc`. Docker can't run a healthcheck inside the container without one of those.
+**No built-in healthcheck — deliberately.** The scratch base has no shell, no `wget`, no `curl`, no `nc`. A static probe binary could be baked in (see [`cplieger/health`](https://github.com/cplieger/health)'s `cmd/probe`), but at ~8 MB it would be many times the ~30 KB server it probes, defeating this image's whole point. Derived images that don't care about size can add one.
 
 For external monitoring, use Uptime Kuma, Prometheus blackbox exporter, or any other off-host probe:
 
@@ -144,7 +146,7 @@ For external monitoring, use Uptime Kuma, Prometheus blackbox exporter, or any o
 curl -sf http://your-host:8567/ -o /dev/null && echo OK
 ```
 
-If you really need a Docker-level healthcheck, the typical pattern is to run a sidecar that hits the static-web container — but for most deployments, an external HTTP probe is simpler and more meaningful (it verifies the network path too).
+If you really need a Docker-level healthcheck, either derive an image that adds `cplieger/health`'s `/probe` binary and a `HEALTHCHECK`, or run a sidecar that hits the static-web container — but for most deployments, an external HTTP probe is simpler and more meaningful (it verifies the network path too).
 
 ## What it doesn't do
 
