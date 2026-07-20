@@ -50,7 +50,7 @@ ENV LDFLAGS="-static-pie -Wl,-z,defs -Wl,-z,now -Wl,-z,relro -Wl,-z,noexecstack"
 # hadolint ignore=DL3018
 RUN apk add --no-cache binutils \
  # Prove the compiler actually ran in strong mode: basic -fstack-protector
- # also emits __stack_chk_fail, so the symbol grep below cannot tell the
+ # also emits __stack_chk_fail, so the call-site check below cannot tell the
  # levels apart. __SSP_STRONG__=3 is predefined only by
  # -fstack-protector-strong, so this gate rejects a silent downgrade.
  && cc ${CFLAGS} -dM -E - </dev/null > /tmp/cc-macros \
@@ -60,7 +60,7 @@ RUN apk add --no-cache binutils \
  # carries the strong flag. v1.17's Makefile uses `CFLAGS?=-O` so the env
  # flags win today, but a future version bump whose Makefile hard-assigns
  # CFLAGS (or substitutes basic -fstack-protector) would pass BOTH the
- # compiler-capability probe above AND the __stack_chk_fail symbol grep
+ # compiler-capability probe above AND the __stack_chk_fail call-site check
  # (basic mode also emits that symbol) while silently downgrading.
  && { grep -q -- '-fstack-protector-strong' /tmp/make-log || { printf '%s\n' 'FAIL: real cc line lacks -fstack-protector-strong (Makefile overrode CFLAGS?)' >&2; cat /tmp/make-log >&2; exit 1; }; } \
  # Assert every claimed compile-time flag with no ELF artifact reached
