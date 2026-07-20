@@ -49,6 +49,8 @@ services:
       - ./www:/www:ro
 ```
 
+> **SELinux hosts (Fedora, RHEL):** with SELinux enforcing, an unlabeled bind mount is invisible to the container process, so every request returns `403 Forbidden` with no other symptom — darkhttpd logs only the 403 access line, and `scratch` has no shell to inspect from inside. Label the mount with `- ./www:/www:ro,z` in compose, or pre-label the directory with `chcon -Rt container_file_t ./www`. Only use `z` on a directory dedicated to this container — it relabels the host files.
+
 Behind a reverse proxy (e.g. Caddy):
 
 ```caddy
@@ -176,13 +178,14 @@ The image is essentially just the binary (see the Image Size badge at the top) �
 
 ## Dependencies
 
-All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate). The base image is pinned by SHA digest and `darkhttpd` by tag + SHA-256; the `build-base`/`upx` build packages are installed unpinned so they track the digest-pinned base.
+All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate). The base image is pinned by SHA digest and `darkhttpd` by tag + SHA-256; the `build-base`/`upx`/`binutils` build packages are installed unpinned so they track the digest-pinned base.
 
 | Dependency       | Source                                                          |
 | ---------------- | --------------------------------------------------------------- |
 | alpine (builder) | [Docker Hub](https://hub.docker.com/_/alpine)                   |
 | build-base       | [Alpine](https://pkgs.alpinelinux.org/packages?name=build-base) |
 | upx              | [Alpine](https://pkgs.alpinelinux.org/packages?name=upx)        |
+| binutils         | [Alpine](https://pkgs.alpinelinux.org/packages?name=binutils)   |
 | darkhttpd        | [GitHub](https://github.com/emikulic/darkhttpd)                 |
 
 ## Credits

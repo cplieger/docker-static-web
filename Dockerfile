@@ -18,9 +18,9 @@ SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 # version+SHA pinned below — it is the shipped artifact.
 # hadolint ignore=DL3018
 RUN apk add --no-cache build-base upx \
- && wget -q --tries=3 --timeout=30 \
+ && wget -q --timeout=30 \
     "https://github.com/emikulic/darkhttpd/archive/refs/tags/${DARKHTTPD_VERSION}.tar.gz" \
- && echo "${DARKHTTPD_SHA256}  ${DARKHTTPD_VERSION}.tar.gz" | sha256sum -c - \
+ && printf '%s  %s\n' "${DARKHTTPD_SHA256}" "${DARKHTTPD_VERSION}.tar.gz" | sha256sum -c - \
  && tar xf "${DARKHTTPD_VERSION}.tar.gz" --no-same-owner \
  && mv "darkhttpd-${DARKHTTPD_VERSION#v}" /src \
  && rm "${DARKHTTPD_VERSION}.tar.gz"
@@ -31,57 +31,97 @@ ENV CFLAGS="-fPIE -O2 -flto -D_FORTIFY_SOURCE=2 \
   -Wall -Werror=format-security \
   -Werror=implicit-function-declaration"
 ENV LDFLAGS="-static-pie -Wl,-z,defs -Wl,-z,now -Wl,-z,relro -Wl,-z,noexecstack"
-# The stack-protector symbol check runs on the unstripped binary; the four
-# program-header / .dynamic checks run after strip (strip preserves those, so
-# they still see the real hardened ELF). upx then rewrites it into a packed
-# stub. Each grep is fail-closed: a dropped protection breaks the chained
-# `&&` and fails the centralized `ci / validate` docker-build gate, so the
-# README/steering hardening claims (static-PIE, RELRO/BIND_NOW, noexec stack,
-# stack-protector) become enforced instead of aspirational. binutils is
-# build-only and never reaches the scratch final image, matching the existing
-# build-base/upx pattern.
+# The stack-protector call-site check runs on the unstripped binary; the
+# ELF-header, program-header, and .dynamic checks run after strip (strip
+# preserves those structures, so they still inspect the real hardened ELF).
+# upx then rewrites it into a packed stub. Each grep is fail-closed: a
+# dropped protection breaks the chained `&&` and fails the centralized
+# `ci / validate` docker-build gate, so the README/steering hardening claims
+# (static-PIE, RELRO/BIND_NOW, noexec stack, stack-protector) become enforced
+# instead of aspirational. binutils is build-only and never reaches the
+# scratch final image, matching the existing build-base/upx pattern.
 #
-# readelf output is written to a file and then grepped, NOT piped into
-# `grep -q`: `grep -q` exits at the first match and closes the pipe, so the
-# large `readelf -sW` symbol-table dump dies on SIGPIPE writing to it, which
-# `pipefail` (set via SHELL above) turns into a spurious exit 141 even though
-# the symbol was found. Grepping a regular file has no pipe and no race.
+# readelf/objdump output is written to a file and then grepped, NOT piped
+# into `grep -q`: `grep -q` exits at the first match and closes the pipe, so
+# a large dump (the `objdump -d` disassembly, the readelf tables) dies on
+# SIGPIPE writing to it, which `pipefail` (set via SHELL above) turns into a
+# spurious exit 141 even though the match was found. Grepping a regular file
+# has no pipe and no race.
 # hadolint ignore=DL3018
 RUN apk add --no-cache binutils \
- && make darkhttpd \
- # stack-protector lives in .symtab; verify BEFORE strip removes the symbol
- # table, otherwise the symbol can never be found and the build breaks.
- && readelf -sW darkhttpd > /tmp/elf-syms \
- && grep -q '__stack_chk_fail' /tmp/elf-syms \
+ # Prove the compiler actually ran in strong mode: basic -fstack-protector
+ # also emits __stack_chk_fail, so the call-site check below cannot tell the
+ # levels apart. __SSP_STRONG__=3 is predefined only by
+ # -fstack-protector-strong, so this gate rejects a silent downgrade.
+ && cc ${CFLAGS} -dM -E - </dev/null > /tmp/cc-macros \
+ && { grep -q '^#define __SSP_STRONG__ 3$' /tmp/cc-macros || { printf '%s\n' 'FAIL: __SSP_STRONG__ != 3 (compiler not in -fstack-protector-strong mode)' >&2; cat /tmp/cc-macros >&2; exit 1; }; } \
+ && make darkhttpd 2>&1 | tee /tmp/make-log \
+ # Couple the macro gate to the real compile: assert make's echoed cc line
+ # carries the strong flag. v1.17's Makefile uses `CFLAGS?=-O` so the env
+ # flags win today, but a future version bump whose Makefile hard-assigns
+ # CFLAGS (or substitutes basic -fstack-protector) would pass BOTH the
+ # compiler-capability probe above AND the __stack_chk_fail call-site check
+ # (basic mode also emits that symbol) while silently downgrading.
+ && { grep -q -- '-fstack-protector-strong' /tmp/make-log || { printf '%s\n' 'FAIL: real cc line lacks -fstack-protector-strong (Makefile overrode CFLAGS?)' >&2; cat /tmp/make-log >&2; exit 1; }; } \
+ # Assert every claimed compile-time flag with no ELF artifact reached
+ # the real cc line: fortify (musl fortify-headers is inline, no _chk
+ # symbols) and stack-clash (no section signature) are only provable here.
+ && { grep -q -- '-D_FORTIFY_SOURCE=2' /tmp/make-log || { printf '%s\n' 'FAIL: real cc line lacks -D_FORTIFY_SOURCE=2 (fortify not compiled in)' >&2; cat /tmp/make-log >&2; exit 1; }; } \
+ && { grep -q -- '-fstack-clash-protection' /tmp/make-log || { printf '%s\n' 'FAIL: real cc line lacks -fstack-clash-protection' >&2; cat /tmp/make-log >&2; exit 1; }; } \
+ # Stack-protector call-site check: a symbol-table grep is vacuous for this
+ # static-musl link (musl always links __stack_chk_fail, even with the
+ # protector off), so disassemble and require an actual compiler-emitted call
+ # into <__stack_chk_fail> (call/callq on amd64, bl on arm64). Runs BEFORE
+ # strip: objdump -d needs the symbol table for the <__stack_chk_fail>
+ # annotations, otherwise the call target can never be named and the build
+ # breaks.
+ && objdump -d darkhttpd > /tmp/elf-disasm \
+ && { grep -Eq '[[:space:]](callq?|bl)[[:space:]].*<__stack_chk_fail>' /tmp/elf-disasm || { printf '%s\n' 'FAIL: no call site targeting <__stack_chk_fail> (stack-protector instrumentation not emitted)' >&2; cat /tmp/elf-disasm >&2; exit 1; }; } \
  && strip --strip-all darkhttpd \
  && readelf -hW darkhttpd > /tmp/elf-hdr \
- && grep -q 'Type:.*DYN' /tmp/elf-hdr \
+ && { grep -q 'Type:.*DYN' /tmp/elf-hdr || { printf '%s\n' 'FAIL: binary is not ET_DYN (static-PIE link lost, no ASLR)' >&2; cat /tmp/elf-hdr >&2; exit 1; }; } \
  && readelf -dW darkhttpd > /tmp/elf-dyn \
- && grep -q 'BIND_NOW' /tmp/elf-dyn \
- && ! grep -q 'NEEDED' /tmp/elf-dyn \
+ && { grep -q 'BIND_NOW' /tmp/elf-dyn || { printf '%s\n' 'FAIL: BIND_NOW absent from .dynamic (lazy binding not disabled)' >&2; cat /tmp/elf-dyn >&2; exit 1; }; } \
+ && { ! grep -q 'NEEDED' /tmp/elf-dyn || { printf '%s\n' 'FAIL: NEEDED entry present (binary is not fully static)' >&2; cat /tmp/elf-dyn >&2; exit 1; }; } \
  && readelf -lW darkhttpd > /tmp/elf-seg \
- && grep -q 'GNU_RELRO' /tmp/elf-seg \
- && grep -q 'GNU_STACK' /tmp/elf-seg \
- && ! grep 'GNU_STACK' /tmp/elf-seg | grep -q 'RWE' \
- && rm -f /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
- && upx --best --lzma darkhttpd
+ && { grep -q 'GNU_RELRO' /tmp/elf-seg || { printf '%s\n' 'FAIL: PT_GNU_RELRO segment missing (RELRO lost)' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
+ && { grep -q 'GNU_STACK' /tmp/elf-seg || { printf '%s\n' 'FAIL: PT_GNU_STACK segment missing' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
+ && { ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg || { printf '%s\n' 'FAIL: stack is RWE (executable) pre-pack' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
+ && rm -f /tmp/cc-macros /tmp/make-log /tmp/elf-disasm /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
+ && upx --best --lzma darkhttpd \
+ # Re-verify the PACKED stub: at execve the kernel takes stack permissions and
+ # the ELF type (PIE/ASLR) from the SHIPPED file's headers, and upx rewrites
+ # them, so the pre-pack assertions above prove the link, not the artifact.
+ # Only header-level claims survive packing (the stub has no .dynamic), so
+ # re-assert noexec stack + DYN here; RELRO/BIND_NOW stay link-time claims
+ # proven pre-pack. If a upx bump ever rewrites these headers, this gate goes
+ # red and the bump must be inspected before shipping.
+ && readelf -hW darkhttpd > /tmp/upx-hdr \
+ && { grep -q 'Type:.*DYN' /tmp/upx-hdr || { printf '%s\n' 'FAIL: packed stub is not ET_DYN (ASLR lost in packing)' >&2; cat /tmp/upx-hdr >&2; exit 1; }; } \
+ && readelf -lW darkhttpd > /tmp/upx-seg \
+ && { grep -q 'GNU_STACK' /tmp/upx-seg || { printf '%s\n' 'FAIL: packed stub lost PT_GNU_STACK' >&2; cat /tmp/upx-seg >&2; exit 1; }; } \
+ && { ! grep -q 'GNU_STACK.*RWE' /tmp/upx-seg || { printf '%s\n' 'FAIL: packed stub stack is RWE (executable)' >&2; cat /tmp/upx-seg >&2; exit 1; }; } \
+ && rm -f /tmp/upx-hdr /tmp/upx-seg
 
 # ---------------------------------------------------------------------------
 # Test stage — runs the build-time smoke test against the final (stripped,
-# UPX-compressed) binary: it serves a file end-to-end and asserts the shipped
-# default flags (--no-listing, --no-server-id, malformed-request resilience),
+# UPX-compressed) binary: it pins the shipped ENTRYPOINT/CMD/WORKDIR/USER
+# directives against this Dockerfile (DOCKERFILE=/tmp/Dockerfile), serves a
+# file end-to-end, and asserts the shipped default flags (--no-listing,
+# --no-server-id, malformed-request resilience),
 # proving the static-PIE link and UPX packing produced a working executable. A
 # failure here fails the centralized `ci / validate` docker build gate, because
 # the scratch final stage copies the binary from this stage. The builder base
 # has busybox wget + nc.
 # ---------------------------------------------------------------------------
 FROM builder AS test
+COPY Dockerfile /tmp/Dockerfile
 COPY tests/ /tmp/tests/
-RUN sh /tmp/tests/smoke.sh
+RUN DOCKERFILE=/tmp/Dockerfile sh /tmp/tests/smoke.sh
 
 FROM scratch
 
-COPY --from=test /src/darkhttpd /darkhttpd
+COPY --from=test --chmod=755 /src/darkhttpd /darkhttpd
 
 WORKDIR /www
 EXPOSE 8567
