@@ -20,7 +20,7 @@ SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 RUN apk add --no-cache build-base upx \
  && wget -q --tries=3 --timeout=30 \
     "https://github.com/emikulic/darkhttpd/archive/refs/tags/${DARKHTTPD_VERSION}.tar.gz" \
- && echo "${DARKHTTPD_SHA256}  ${DARKHTTPD_VERSION}.tar.gz" | sha256sum -c - \
+ && printf '%s  %s\n' "${DARKHTTPD_SHA256}" "${DARKHTTPD_VERSION}.tar.gz" | sha256sum -c - \
  && tar xf "${DARKHTTPD_VERSION}.tar.gz" --no-same-owner \
  && mv "darkhttpd-${DARKHTTPD_VERSION#v}" /src \
  && rm "${DARKHTTPD_VERSION}.tar.gz"
@@ -62,7 +62,7 @@ RUN apk add --no-cache binutils \
  && readelf -lW darkhttpd > /tmp/elf-seg \
  && grep -q 'GNU_RELRO' /tmp/elf-seg \
  && grep -q 'GNU_STACK' /tmp/elf-seg \
- && ! grep 'GNU_STACK' /tmp/elf-seg | grep -q 'RWE' \
+ && ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg \
  && rm -f /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
  && upx --best --lzma darkhttpd
 
@@ -81,7 +81,7 @@ RUN sh /tmp/tests/smoke.sh
 
 FROM scratch
 
-COPY --from=test /src/darkhttpd /darkhttpd
+COPY --from=test --chmod=755 /src/darkhttpd /darkhttpd
 
 WORKDIR /www
 EXPOSE 8567

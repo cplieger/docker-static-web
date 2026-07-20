@@ -41,7 +41,7 @@ pid=$!
 body=''
 i=0
 while [ "$i" -lt 25 ]; do
-  if body=$(wget -qO- http://127.0.0.1:8567/index.html 2>/dev/null); then
+  if body=$(wget -T 2 -qO- http://127.0.0.1:8567/index.html 2>/dev/null); then
     break
   fi
   i=$((i + 1))
@@ -54,16 +54,19 @@ if [ "$body" != "smoke-ok" ]; then
   fail=1
 fi
 
-# --- 2. --no-listing: a directory with no index must not leak its entries.
-# darkhttpd 404s the request, so wget exits non-zero and the branch is skipped;
-# if the request ever succeeds, the body must not name the directory contents.
-if listing=$(wget -qO- http://127.0.0.1:8567/nolist/ 2>/dev/null); then
-  case "$listing" in
-    *secret.txt*)
-      err "FAIL: directory listing leaked filenames despite --no-listing"
-      fail=1
-      ;;
-  esac
+# --- 2. --no-listing: require an observable response (404 = correctly denied;
+# any 200 body must not name the directory contents). Fetch over nc and demand
+# the status line so a dead/hung server or transient fetch failure is a hard
+# FAIL, never a vacuous pass.
+nolist_resp=$(printf 'GET /nolist/ HTTP/1.0\r\n\r\n' | nc -w 2 127.0.0.1 8567 || true)
+if ! printf '%s\n' "$nolist_resp" | grep -q 'HTTP/1'; then
+  err "FAIL: could not capture a response to verify --no-listing"
+  err "$(cat "$srv_log")"
+  fail=1
+elif printf '%s\n' "$nolist_resp" | grep -q 'secret.txt'; then
+  err "FAIL: directory listing leaked filenames despite --no-listing"
+  err "$(printf '%s\n' "$nolist_resp" | head -10)"
+  fail=1
 fi
 
 # --- 3. --no-server-id: the raw response must not carry a Server: header.
@@ -82,7 +85,7 @@ fi
 
 # --- 4. Malformed request: the server must reject it and keep serving.
 printf 'not-a-http-request\r\n\r\n' | nc -w 2 127.0.0.1 8567 >/dev/null 2>&1 || true
-after=$(wget -qO- http://127.0.0.1:8567/index.html 2>/dev/null) || after=''
+after=$(wget -T 2 -qO- http://127.0.0.1:8567/index.html 2>/dev/null) || after=''
 if [ "$after" != "smoke-ok" ]; then
   err "FAIL: server stopped serving after a malformed request"
   err "$(cat "$srv_log")"
