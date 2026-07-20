@@ -15,13 +15,27 @@
 #   3. --no-server-id: responses must not carry a Server: header
 #   4. a malformed request must not kill the server
 #
-# Run locally:  DARKHTTPD_BIN=/path/to/darkhttpd sh tests/smoke.sh
+# Run locally:  DARKHTTPD_BIN=/path/to/darkhttpd DOCKERFILE=./Dockerfile sh tests/smoke.sh
 set -eu
 
 BIN="${DARKHTTPD_BIN:-/src/darkhttpd}"
 fail=0
 log() { printf '%s\n' "$*"; }     # progress + final verdict -> stdout
 err() { printf '%s\n' "$*" >&2; } # failures + captured output -> stderr
+
+# --- 0. Dockerfile runtime-directive assertions: the launch below mirrors the
+# image CMD by hand, so pin the shipped ENTRYPOINT/CMD lines against the
+# Dockerfile itself — a future edit that drops a default flag from CMD must
+# fail here instead of drifting silently past the test's independent copy.
+: "${DOCKERFILE:?DOCKERFILE must name the Dockerfile under test}"
+assert_docker_directive() {
+  if ! grep -Fqx -- "$1" "$DOCKERFILE"; then
+    err "FAIL: Dockerfile does not ship expected directive: $1"
+    exit 1
+  fi
+}
+assert_docker_directive 'ENTRYPOINT ["/darkhttpd"]'
+assert_docker_directive 'CMD [".", "--port", "8567", "--maxconn", "128", "--no-listing", "--no-server-id"]'
 
 root=$(mktemp -d)
 srv_log=$(mktemp)
