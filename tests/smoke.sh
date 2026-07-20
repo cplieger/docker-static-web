@@ -106,6 +106,7 @@ if ! has_http_status "$nolist_resp"; then
 elif printf '%s\n' "$nolist_resp" | grep -q 'secret.txt'; then
   err "FAIL: directory listing leaked filenames despite --no-listing"
   err "$(printf '%s\n' "$nolist_resp" | head -n 10)"
+  dump_server_log
   fail=1
 fi
 
@@ -121,6 +122,7 @@ if ! has_http_status "$resp"; then
 elif printf '%s\n' "$resp" | grep -qi '^server:'; then
   err "FAIL: response carries a Server: header despite --no-server-id"
   err "$(printf '%s\n' "$resp" | head -n 10)"
+  dump_server_log
   fail=1
 fi
 

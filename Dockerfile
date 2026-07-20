@@ -31,7 +31,7 @@ ENV CFLAGS="-fPIE -O2 -flto -D_FORTIFY_SOURCE=2 \
   -Wall -Werror=format-security \
   -Werror=implicit-function-declaration"
 ENV LDFLAGS="-static-pie -Wl,-z,defs -Wl,-z,now -Wl,-z,relro -Wl,-z,noexecstack"
-# The stack-protector symbol check runs on the unstripped binary; the
+# The stack-protector call-site check runs on the unstripped binary; the
 # ELF-header, program-header, and .dynamic checks run after strip (strip
 # preserves those structures, so they still inspect the real hardened ELF).
 # upx then rewrites it into a packed stub. Each grep is fail-closed: a
@@ -41,11 +41,12 @@ ENV LDFLAGS="-static-pie -Wl,-z,defs -Wl,-z,now -Wl,-z,relro -Wl,-z,noexecstack"
 # instead of aspirational. binutils is build-only and never reaches the
 # scratch final image, matching the existing build-base/upx pattern.
 #
-# readelf output is written to a file and then grepped, NOT piped into
-# `grep -q`: `grep -q` exits at the first match and closes the pipe, so the
-# large `readelf -sW` symbol-table dump dies on SIGPIPE writing to it, which
-# `pipefail` (set via SHELL above) turns into a spurious exit 141 even though
-# the symbol was found. Grepping a regular file has no pipe and no race.
+# readelf/objdump output is written to a file and then grepped, NOT piped
+# into `grep -q`: `grep -q` exits at the first match and closes the pipe, so
+# a large dump (the `objdump -d` disassembly, the readelf tables) dies on
+# SIGPIPE writing to it, which `pipefail` (set via SHELL above) turns into a
+# spurious exit 141 even though the match was found. Grepping a regular file
+# has no pipe and no race.
 # hadolint ignore=DL3018
 RUN apk add --no-cache binutils \
  # Prove the compiler actually ran in strong mode: basic -fstack-protector
@@ -67,10 +68,15 @@ RUN apk add --no-cache binutils \
  # symbols) and stack-clash (no section signature) are only provable here.
  && { grep -q -- '-D_FORTIFY_SOURCE=2' /tmp/make-log || { printf '%s\n' 'FAIL: real cc line lacks -D_FORTIFY_SOURCE=2 (fortify not compiled in)' >&2; cat /tmp/make-log >&2; exit 1; }; } \
  && { grep -q -- '-fstack-clash-protection' /tmp/make-log || { printf '%s\n' 'FAIL: real cc line lacks -fstack-clash-protection' >&2; cat /tmp/make-log >&2; exit 1; }; } \
- # stack-protector lives in .symtab; verify BEFORE strip removes the symbol
- # table, otherwise the symbol can never be found and the build breaks.
- && readelf -sW darkhttpd > /tmp/elf-syms \
- && { grep -q '__stack_chk_fail' /tmp/elf-syms || { printf '%s\n' 'FAIL: __stack_chk_fail absent from symbol table (stack protector not linked)' >&2; cat /tmp/elf-syms >&2; exit 1; }; } \
+ # Stack-protector call-site check: a symbol-table grep is vacuous for this
+ # static-musl link (musl always links __stack_chk_fail, even with the
+ # protector off), so disassemble and require an actual compiler-emitted call
+ # into <__stack_chk_fail> (call/callq on amd64, bl on arm64). Runs BEFORE
+ # strip: objdump -d needs the symbol table for the <__stack_chk_fail>
+ # annotations, otherwise the call target can never be named and the build
+ # breaks.
+ && objdump -d darkhttpd > /tmp/elf-disasm \
+ && { grep -Eq '[[:space:]](callq?|bl)[[:space:]].*<__stack_chk_fail>' /tmp/elf-disasm || { printf '%s\n' 'FAIL: no call site targeting <__stack_chk_fail> (stack-protector instrumentation not emitted)' >&2; cat /tmp/elf-disasm >&2; exit 1; }; } \
  && strip --strip-all darkhttpd \
  && readelf -hW darkhttpd > /tmp/elf-hdr \
  && { grep -q 'Type:.*DYN' /tmp/elf-hdr || { printf '%s\n' 'FAIL: binary is not ET_DYN (static-PIE link lost, no ASLR)' >&2; cat /tmp/elf-hdr >&2; exit 1; }; } \
@@ -81,7 +87,7 @@ RUN apk add --no-cache binutils \
  && { grep -q 'GNU_RELRO' /tmp/elf-seg || { printf '%s\n' 'FAIL: PT_GNU_RELRO segment missing (RELRO lost)' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
  && { grep -q 'GNU_STACK' /tmp/elf-seg || { printf '%s\n' 'FAIL: PT_GNU_STACK segment missing' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
  && { ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg || { printf '%s\n' 'FAIL: stack is RWE (executable) pre-pack' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
- && rm -f /tmp/cc-macros /tmp/make-log /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
+ && rm -f /tmp/cc-macros /tmp/make-log /tmp/elf-disasm /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
  && upx --best --lzma darkhttpd \
  # Re-verify the PACKED stub: at execve the kernel takes stack permissions and
  # the ELF type (PIE/ASLR) from the SHIPPED file's headers, and upx rewrites
