@@ -54,8 +54,7 @@ RUN apk add --no-cache binutils \
  # -fstack-protector-strong, so this gate rejects a silent downgrade.
  && cc ${CFLAGS} -dM -E - </dev/null > /tmp/cc-macros \
  && grep -q '^#define __SSP_STRONG__ 3$' /tmp/cc-macros \
- && make darkhttpd > /tmp/make-log 2>&1 \
- && cat /tmp/make-log \
+ && make darkhttpd 2>&1 | tee /tmp/make-log \
  # Couple the macro gate to the real compile: assert make's echoed cc line
  # carries the strong flag. v1.17's Makefile uses `CFLAGS?=-O` so the env
  # flags win today, but a future version bump whose Makefile hard-assigns
