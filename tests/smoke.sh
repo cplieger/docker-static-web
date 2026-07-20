@@ -42,7 +42,9 @@ printf 'leak-check\n' >"$root/nolist/secret.txt"
 
 # Capture darkhttpd's own output so a startup failure (bad static-PIE link or
 # UPX corruption) shows WHY on failure instead of only a bare empty body.
-# The flags mirror the image CMD so the test asserts the shipped defaults.
+# The flags mirror the image CMD (plus a test-only --addr 127.0.0.1 to keep
+# the listener loopback-bound inside the build container; the CMD itself sets
+# no --addr) so the test asserts the shipped defaults.
 "$BIN" "$root" --port 8567 --addr 127.0.0.1 \
   --maxconn 128 --no-listing --no-server-id >"$srv_log" 2>&1 &
 pid=$!
@@ -75,7 +77,7 @@ if ! has_http_status "$nolist_resp"; then
   fail=1
 elif printf '%s\n' "$nolist_resp" | grep -q 'secret.txt'; then
   err "FAIL: directory listing leaked filenames despite --no-listing"
-  err "$(printf '%s\n' "$nolist_resp" | head -10)"
+  err "$(printf '%s\n' "$nolist_resp" | head -n 10)"
   fail=1
 fi
 
@@ -90,7 +92,7 @@ if ! has_http_status "$resp"; then
   fail=1
 elif printf '%s\n' "$resp" | grep -qi '^server:'; then
   err "FAIL: response carries a Server: header despite --no-server-id"
-  err "$(printf '%s\n' "$resp" | head -10)"
+  err "$(printf '%s\n' "$resp" | head -n 10)"
   fail=1
 fi
 

@@ -54,7 +54,15 @@ RUN apk add --no-cache binutils \
  # -fstack-protector-strong, so this gate rejects a silent downgrade.
  && cc ${CFLAGS} -dM -E - </dev/null > /tmp/cc-macros \
  && grep -q '^#define __SSP_STRONG__ 3$' /tmp/cc-macros \
- && make darkhttpd \
+ && make darkhttpd > /tmp/make-log 2>&1 \
+ && cat /tmp/make-log \
+ # Couple the macro gate to the real compile: assert make's echoed cc line
+ # carries the strong flag. v1.17's Makefile uses `CFLAGS?=-O` so the env
+ # flags win today, but a future version bump whose Makefile hard-assigns
+ # CFLAGS (or substitutes basic -fstack-protector) would pass BOTH the
+ # compiler-capability probe above AND the __stack_chk_fail symbol grep
+ # (basic mode also emits that symbol) while silently downgrading.
+ && grep -q -- '-fstack-protector-strong' /tmp/make-log \
  # stack-protector lives in .symtab; verify BEFORE strip removes the symbol
  # table, otherwise the symbol can never be found and the build breaks.
  && readelf -sW darkhttpd > /tmp/elf-syms \
@@ -69,7 +77,7 @@ RUN apk add --no-cache binutils \
  && grep -q 'GNU_RELRO' /tmp/elf-seg \
  && grep -q 'GNU_STACK' /tmp/elf-seg \
  && ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg \
- && rm -f /tmp/cc-macros /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
+ && rm -f /tmp/cc-macros /tmp/make-log /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
  && upx --best --lzma darkhttpd
 
 # ---------------------------------------------------------------------------
