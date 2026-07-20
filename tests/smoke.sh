@@ -15,6 +15,11 @@
 #   3. --no-server-id: responses must not carry a Server: header
 #   4. a malformed request must not kill the server
 #
+# Before any of that, check 0 pins the Dockerfile's literal ENTRYPOINT/CMD/
+# WORKDIR/USER directives (assert_docker_directive; requires DOCKERFILE) so
+# the hand-mirrored launch flags below cannot silently drift from the shipped
+# image command.
+#
 # Run locally:  DARKHTTPD_BIN=/path/to/darkhttpd DOCKERFILE=./Dockerfile sh tests/smoke.sh
 set -eu
 
@@ -36,6 +41,11 @@ assert_docker_directive() {
 }
 assert_docker_directive 'ENTRYPOINT ["/darkhttpd"]'
 assert_docker_directive 'CMD [".", "--port", "8567", "--maxconn", "128", "--no-listing", "--no-server-id"]'
+# The CMD's "." document root resolves against WORKDIR, and the non-root
+# contract lives in USER; pin both so a final-stage edit cannot silently
+# change the served root or drop the non-root default.
+assert_docker_directive 'WORKDIR /www'
+assert_docker_directive 'USER 65534:65534'
 
 root=$(mktemp -d)
 srv_log=$(mktemp)
@@ -49,7 +59,11 @@ has_http_status() {
 
 # Dump the captured darkhttpd output on any runtime-failure branch so every
 # failure path carries the same process diagnostic.
-dump_server_log() { err "$(cat "$srv_log")"; }
+dump_server_log() {
+  err '--- darkhttpd output (srv_log) ---'
+  err "$(cat "$srv_log")"
+  err '--- end darkhttpd output ---'
+}
 printf 'smoke-ok\n' >"$root/index.html"
 mkdir "$root/nolist"
 printf 'leak-check\n' >"$root/nolist/secret.txt"

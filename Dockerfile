@@ -99,8 +99,10 @@ RUN apk add --no-cache binutils \
 
 # ---------------------------------------------------------------------------
 # Test stage — runs the build-time smoke test against the final (stripped,
-# UPX-compressed) binary: it serves a file end-to-end and asserts the shipped
-# default flags (--no-listing, --no-server-id, malformed-request resilience),
+# UPX-compressed) binary: it pins the shipped ENTRYPOINT/CMD/WORKDIR/USER
+# directives against this Dockerfile (DOCKERFILE=/tmp/Dockerfile), serves a
+# file end-to-end, and asserts the shipped default flags (--no-listing,
+# --no-server-id, malformed-request resilience),
 # proving the static-PIE link and UPX packing produced a working executable. A
 # failure here fails the centralized `ci / validate` docker build gate, because
 # the scratch final stage copies the binary from this stage. The builder base
