@@ -2,14 +2,18 @@
 
 This image packages upstream [darkhttpd](https://github.com/emikulic/darkhttpd)
 into a `scratch`-based container. There is no application source here — the
-whole repo is a single multi-stage `Dockerfile` plus CI config — so most
-contributions are build/Dockerfile changes. A few things are easy to trip over.
+whole repo is a multi-stage `Dockerfile`, its build-time smoke test, and CI
+config — so most contributions are build/Dockerfile changes. A few things are
+easy to trip over.
 
 ## Layout
 
 - `Dockerfile` — the only build artifact. An Alpine `builder` stage compiles
   darkhttpd statically (hardening flags + UPX), then copies the single binary
   onto `scratch`.
+- `tests/smoke.sh` — build-time smoke test; the Dockerfile `test` stage runs it
+  against the stripped, UPX-compressed binary, so every `docker build` executes
+  it.
 - `compose.yaml` — reference deployment (mounts `./www:/www:ro`, serves on
   `8567`).
 - `cliff.toml` — git-cliff changelog/version policy.
@@ -43,7 +47,8 @@ curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz \
 ## Build and validate locally
 
 CI runs centrally, but everything validates with a plain build — the
-`sha256sum -c` check and the C compile both run inside it:
+`sha256sum -c` check, the C compile, the hardening `readelf` gates, and
+`tests/smoke.sh` (the `test` stage) all run inside it:
 
 ```bash
 docker build -t docker-static-web .
@@ -69,6 +74,10 @@ container — probe it from the host:
 docker run --rm -p 8567:8567 -v "$PWD/www:/www:ro" docker-static-web
 curl -sf http://localhost:8567/ -o /dev/null && echo OK
 ```
+
+On an SELinux-enforcing host (Fedora, RHEL) an unlabeled bind mount makes
+every request return `403 Forbidden` — see the SELinux note in the
+[README quick start](README.md#quick-start) for the `:ro,z` / `chcon` fix.
 
 ## Conventions
 

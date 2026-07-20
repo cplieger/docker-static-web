@@ -18,7 +18,7 @@ SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 # version+SHA pinned below — it is the shipped artifact.
 # hadolint ignore=DL3018
 RUN apk add --no-cache build-base upx \
- && wget -q --tries=3 --timeout=30 \
+ && wget -q --timeout=30 \
     "https://github.com/emikulic/darkhttpd/archive/refs/tags/${DARKHTTPD_VERSION}.tar.gz" \
  && printf '%s  %s\n' "${DARKHTTPD_SHA256}" "${DARKHTTPD_VERSION}.tar.gz" | sha256sum -c - \
  && tar xf "${DARKHTTPD_VERSION}.tar.gz" --no-same-owner \
@@ -53,7 +53,7 @@ RUN apk add --no-cache binutils \
  # levels apart. __SSP_STRONG__=3 is predefined only by
  # -fstack-protector-strong, so this gate rejects a silent downgrade.
  && cc ${CFLAGS} -dM -E - </dev/null > /tmp/cc-macros \
- && grep -q '^#define __SSP_STRONG__ 3$' /tmp/cc-macros \
+ && { grep -q '^#define __SSP_STRONG__ 3$' /tmp/cc-macros || { echo 'FAIL: __SSP_STRONG__ != 3 (compiler not in -fstack-protector-strong mode)' >&2; cat /tmp/cc-macros >&2; exit 1; }; } \
  && make darkhttpd 2>&1 | tee /tmp/make-log \
  # Couple the macro gate to the real compile: assert make's echoed cc line
  # carries the strong flag. v1.17's Makefile uses `CFLAGS?=-O` so the env
@@ -61,21 +61,26 @@ RUN apk add --no-cache binutils \
  # CFLAGS (or substitutes basic -fstack-protector) would pass BOTH the
  # compiler-capability probe above AND the __stack_chk_fail symbol grep
  # (basic mode also emits that symbol) while silently downgrading.
- && grep -q -- '-fstack-protector-strong' /tmp/make-log \
+ && { grep -q -- '-fstack-protector-strong' /tmp/make-log || { echo 'FAIL: real cc line lacks -fstack-protector-strong (Makefile overrode CFLAGS?)' >&2; cat /tmp/make-log >&2; exit 1; }; } \
+ # Assert every claimed compile-time flag with no ELF artifact reached
+ # the real cc line: fortify (musl fortify-headers is inline, no _chk
+ # symbols) and stack-clash (no section signature) are only provable here.
+ && { grep -q -- '-D_FORTIFY_SOURCE=2' /tmp/make-log || { echo 'FAIL: real cc line lacks -D_FORTIFY_SOURCE=2 (fortify not compiled in)' >&2; cat /tmp/make-log >&2; exit 1; }; } \
+ && { grep -q -- '-fstack-clash-protection' /tmp/make-log || { echo 'FAIL: real cc line lacks -fstack-clash-protection' >&2; cat /tmp/make-log >&2; exit 1; }; } \
  # stack-protector lives in .symtab; verify BEFORE strip removes the symbol
  # table, otherwise the symbol can never be found and the build breaks.
  && readelf -sW darkhttpd > /tmp/elf-syms \
- && grep -q '__stack_chk_fail' /tmp/elf-syms \
+ && { grep -q '__stack_chk_fail' /tmp/elf-syms || { echo 'FAIL: __stack_chk_fail absent from symbol table (stack protector not linked)' >&2; cat /tmp/elf-syms >&2; exit 1; }; } \
  && strip --strip-all darkhttpd \
  && readelf -hW darkhttpd > /tmp/elf-hdr \
- && grep -q 'Type:.*DYN' /tmp/elf-hdr \
+ && { grep -q 'Type:.*DYN' /tmp/elf-hdr || { echo 'FAIL: binary is not ET_DYN (static-PIE link lost, no ASLR)' >&2; cat /tmp/elf-hdr >&2; exit 1; }; } \
  && readelf -dW darkhttpd > /tmp/elf-dyn \
- && grep -q 'BIND_NOW' /tmp/elf-dyn \
- && ! grep -q 'NEEDED' /tmp/elf-dyn \
+ && { grep -q 'BIND_NOW' /tmp/elf-dyn || { echo 'FAIL: BIND_NOW absent from .dynamic (lazy binding not disabled)' >&2; cat /tmp/elf-dyn >&2; exit 1; }; } \
+ && { ! grep -q 'NEEDED' /tmp/elf-dyn || { echo 'FAIL: NEEDED entry present (binary is not fully static)' >&2; cat /tmp/elf-dyn >&2; exit 1; }; } \
  && readelf -lW darkhttpd > /tmp/elf-seg \
- && grep -q 'GNU_RELRO' /tmp/elf-seg \
- && grep -q 'GNU_STACK' /tmp/elf-seg \
- && ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg \
+ && { grep -q 'GNU_RELRO' /tmp/elf-seg || { echo 'FAIL: PT_GNU_RELRO segment missing (RELRO lost)' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
+ && { grep -q 'GNU_STACK' /tmp/elf-seg || { echo 'FAIL: PT_GNU_STACK segment missing' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
+ && { ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg || { echo 'FAIL: stack is RWE (executable) pre-pack' >&2; cat /tmp/elf-seg >&2; exit 1; }; } \
  && rm -f /tmp/cc-macros /tmp/make-log /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
  && upx --best --lzma darkhttpd \
  # Re-verify the PACKED stub: at execve the kernel takes stack permissions and
@@ -86,10 +91,10 @@ RUN apk add --no-cache binutils \
  # proven pre-pack. If a upx bump ever rewrites these headers, this gate goes
  # red and the bump must be inspected before shipping.
  && readelf -hW darkhttpd > /tmp/upx-hdr \
- && grep -q 'Type:.*DYN' /tmp/upx-hdr \
+ && { grep -q 'Type:.*DYN' /tmp/upx-hdr || { echo 'FAIL: packed stub is not ET_DYN (ASLR lost in packing)' >&2; cat /tmp/upx-hdr >&2; exit 1; }; } \
  && readelf -lW darkhttpd > /tmp/upx-seg \
- && grep -q 'GNU_STACK' /tmp/upx-seg \
- && ! grep -q 'GNU_STACK.*RWE' /tmp/upx-seg \
+ && { grep -q 'GNU_STACK' /tmp/upx-seg || { echo 'FAIL: packed stub lost PT_GNU_STACK' >&2; cat /tmp/upx-seg >&2; exit 1; }; } \
+ && { ! grep -q 'GNU_STACK.*RWE' /tmp/upx-seg || { echo 'FAIL: packed stub stack is RWE (executable)' >&2; cat /tmp/upx-seg >&2; exit 1; }; } \
  && rm -f /tmp/upx-hdr /tmp/upx-seg
 
 # ---------------------------------------------------------------------------

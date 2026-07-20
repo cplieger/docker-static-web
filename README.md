@@ -49,6 +49,8 @@ services:
       - ./www:/www:ro
 ```
 
+> **SELinux hosts (Fedora, RHEL):** with SELinux enforcing, an unlabeled bind mount is invisible to the container process, so every request returns `403 Forbidden` with no other symptom — darkhttpd logs only the 403 access line, and `scratch` has no shell to inspect from inside. Label the mount with `- ./www:/www:ro,z` in compose, or pre-label the directory with `chcon -Rt container_file_t ./www`. Only use `z` on a directory dedicated to this container — it relabels the host files.
+
 Behind a reverse proxy (e.g. Caddy):
 
 ```caddy
