@@ -77,7 +77,20 @@ RUN apk add --no-cache binutils \
  && grep -q 'GNU_STACK' /tmp/elf-seg \
  && ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg \
  && rm -f /tmp/cc-macros /tmp/make-log /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
- && upx --best --lzma darkhttpd
+ && upx --best --lzma darkhttpd \
+ # Re-verify the PACKED stub: at execve the kernel takes stack permissions and
+ # the ELF type (PIE/ASLR) from the SHIPPED file's headers, and upx rewrites
+ # them, so the pre-pack assertions above prove the link, not the artifact.
+ # Only header-level claims survive packing (the stub has no .dynamic), so
+ # re-assert noexec stack + DYN here; RELRO/BIND_NOW stay link-time claims
+ # proven pre-pack. If a upx bump ever rewrites these headers, this gate goes
+ # red and the bump must be inspected before shipping.
+ && readelf -hW darkhttpd > /tmp/upx-hdr \
+ && grep -q 'Type:.*DYN' /tmp/upx-hdr \
+ && readelf -lW darkhttpd > /tmp/upx-seg \
+ && grep -q 'GNU_STACK' /tmp/upx-seg \
+ && ! grep -q 'GNU_STACK.*RWE' /tmp/upx-seg \
+ && rm -f /tmp/upx-hdr /tmp/upx-seg
 
 # ---------------------------------------------------------------------------
 # Test stage — runs the build-time smoke test against the final (stripped,
