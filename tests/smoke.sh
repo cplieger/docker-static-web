@@ -26,6 +26,16 @@ err() { printf '%s\n' "$*" >&2; } # failures + captured output -> stderr
 root=$(mktemp -d)
 srv_log=$(mktemp)
 trap 'kill "${pid:-}" 2>/dev/null || true; rm -rf "$root" "$srv_log"' EXIT
+
+# Require a valid HTTP status line on the FIRST response line only, so stray
+# "HTTP/1" text in a header or body cannot satisfy the liveness prerequisite.
+has_http_status() {
+  printf '%s\n' "$1" | head -n 1 | grep -Eq '^HTTP/1\.[01] [0-9][0-9][0-9] '
+}
+
+# Dump the captured darkhttpd output on any runtime-failure branch so every
+# failure path carries the same process diagnostic.
+dump_server_log() { err "$(cat "$srv_log")"; }
 printf 'smoke-ok\n' >"$root/index.html"
 mkdir "$root/nolist"
 printf 'leak-check\n' >"$root/nolist/secret.txt"
@@ -50,7 +60,7 @@ done
 
 if [ "$body" != "smoke-ok" ]; then
   err "FAIL: darkhttpd did not serve the expected body (got: '$body')"
-  err "$(cat "$srv_log")"
+  dump_server_log
   fail=1
 fi
 
@@ -59,9 +69,9 @@ fi
 # the status line so a dead/hung server or transient fetch failure is a hard
 # FAIL, never a vacuous pass.
 nolist_resp=$(printf 'GET /nolist/ HTTP/1.0\r\n\r\n' | nc -w 2 127.0.0.1 8567 || true)
-if ! printf '%s\n' "$nolist_resp" | grep -q 'HTTP/1'; then
+if ! has_http_status "$nolist_resp"; then
   err "FAIL: could not capture a response to verify --no-listing"
-  err "$(cat "$srv_log")"
+  dump_server_log
   fail=1
 elif printf '%s\n' "$nolist_resp" | grep -q 'secret.txt'; then
   err "FAIL: directory listing leaked filenames despite --no-listing"
@@ -74,8 +84,9 @@ fi
 # interplay), and require the status line so a failed capture cannot
 # vacuously pass the grep below.
 resp=$(printf 'GET /index.html HTTP/1.0\r\n\r\n' | nc -w 2 127.0.0.1 8567 || true)
-if ! printf '%s\n' "$resp" | grep -q 'HTTP/1'; then
+if ! has_http_status "$resp"; then
   err "FAIL: could not capture response headers to verify --no-server-id"
+  dump_server_log
   fail=1
 elif printf '%s\n' "$resp" | grep -qi '^server:'; then
   err "FAIL: response carries a Server: header despite --no-server-id"
@@ -88,7 +99,7 @@ printf 'not-a-http-request\r\n\r\n' | nc -w 2 127.0.0.1 8567 >/dev/null 2>&1 || 
 after=$(wget -T 2 -qO- http://127.0.0.1:8567/index.html 2>/dev/null) || after=''
 if [ "$after" != "smoke-ok" ]; then
   err "FAIL: server stopped serving after a malformed request"
-  err "$(cat "$srv_log")"
+  dump_server_log
   fail=1
 fi
 

@@ -48,6 +48,12 @@ ENV LDFLAGS="-static-pie -Wl,-z,defs -Wl,-z,now -Wl,-z,relro -Wl,-z,noexecstack"
 # the symbol was found. Grepping a regular file has no pipe and no race.
 # hadolint ignore=DL3018
 RUN apk add --no-cache binutils \
+ # Prove the compiler actually ran in strong mode: basic -fstack-protector
+ # also emits __stack_chk_fail, so the symbol grep below cannot tell the
+ # levels apart. __SSP_STRONG__=3 is predefined only by
+ # -fstack-protector-strong, so this gate rejects a silent downgrade.
+ && cc ${CFLAGS} -dM -E - </dev/null > /tmp/cc-macros \
+ && grep -q '^#define __SSP_STRONG__ 3$' /tmp/cc-macros \
  && make darkhttpd \
  # stack-protector lives in .symtab; verify BEFORE strip removes the symbol
  # table, otherwise the symbol can never be found and the build breaks.
@@ -63,7 +69,7 @@ RUN apk add --no-cache binutils \
  && grep -q 'GNU_RELRO' /tmp/elf-seg \
  && grep -q 'GNU_STACK' /tmp/elf-seg \
  && ! grep -q 'GNU_STACK.*RWE' /tmp/elf-seg \
- && rm -f /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
+ && rm -f /tmp/cc-macros /tmp/elf-syms /tmp/elf-hdr /tmp/elf-dyn /tmp/elf-seg \
  && upx --best --lzma darkhttpd
 
 # ---------------------------------------------------------------------------
