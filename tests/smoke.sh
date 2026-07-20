@@ -126,7 +126,7 @@ elif printf '%s\n' "$resp" | grep -qi '^server:'; then
   fail=1
 fi
 
-# --- 4. Malformed request: the server must reject it and keep serving.
+# --- 4. Malformed request: the server must remain alive and keep serving.
 printf 'not-a-http-request\r\n\r\n' | nc -w 2 127.0.0.1 8567 >/dev/null 2>&1 || true
 after=$(wget -T 2 -qO- http://127.0.0.1:8567/index.html 2>/dev/null) || after=''
 if [ "$after" != "smoke-ok" ]; then
