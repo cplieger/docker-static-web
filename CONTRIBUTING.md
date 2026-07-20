@@ -47,7 +47,7 @@ curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz \
 ## Build and validate locally
 
 CI runs centrally, but everything validates with a plain build — the
-`sha256sum -c` check, the C compile, the hardening `readelf` gates, and
+`sha256sum -c` check, the C compile, the hardening `readelf`/`objdump` gates, and
 `tests/smoke.sh` (the `test` stage) all run inside it:
 
 ```bash
