@@ -103,7 +103,7 @@ if ! has_http_status "$nolist_resp"; then
   err "FAIL: could not capture a response to verify --no-listing"
   dump_server_log
   fail=1
-elif printf '%s\n' "$nolist_resp" | grep -q 'secret.txt'; then
+elif printf '%s\n' "$nolist_resp" | grep -qF 'secret.txt'; then
   err "FAIL: directory listing leaked filenames despite --no-listing"
   err "$(printf '%s\n' "$nolist_resp" | head -n 10)"
   dump_server_log

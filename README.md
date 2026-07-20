@@ -178,13 +178,14 @@ The image is essentially just the binary (see the Image Size badge at the top) â
 
 ## Dependencies
 
-All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate). The base image is pinned by SHA digest and `darkhttpd` by tag + SHA-256; the `build-base`/`upx` build packages are installed unpinned so they track the digest-pinned base.
+All dependencies are updated automatically via [Renovate](https://github.com/renovatebot/renovate). The base image is pinned by SHA digest and `darkhttpd` by tag + SHA-256; the `build-base`/`upx`/`binutils` build packages are installed unpinned so they track the digest-pinned base.
 
 | Dependency       | Source                                                          |
 | ---------------- | --------------------------------------------------------------- |
 | alpine (builder) | [Docker Hub](https://hub.docker.com/_/alpine)                   |
 | build-base       | [Alpine](https://pkgs.alpinelinux.org/packages?name=build-base) |
 | upx              | [Alpine](https://pkgs.alpinelinux.org/packages?name=upx)        |
+| binutils         | [Alpine](https://pkgs.alpinelinux.org/packages?name=binutils)   |
 | darkhttpd        | [GitHub](https://github.com/emikulic/darkhttpd)                 |
 
 ## Credits
