@@ -14,13 +14,18 @@
 #   2. --no-listing: a directory without an index must not leak its entries
 #   3. --no-server-id: responses must not carry a Server: header
 #   4. a malformed request must not kill the server
+#   5. the embedded CycloneDX SBOM fragment ships and names darkhttpd — on a
+#      scratch image with a UPX-packed binary it is the release SBOM's only
+#      component inventory (see the Dockerfile comment), so its absence or
+#      malformation must fail the build here, not surface in a registry scan
 #
 # Before any of that, check 0 pins the Dockerfile's literal ENTRYPOINT/CMD/
 # WORKDIR/USER directives (assert_docker_directive; requires DOCKERFILE) so
 # the hand-mirrored launch flags below cannot silently drift from the shipped
 # image command.
 #
-# Run locally:  DARKHTTPD_BIN=/path/to/darkhttpd DOCKERFILE=./Dockerfile sh tests/smoke.sh
+# Run locally:  DARKHTTPD_BIN=/path/to/darkhttpd DOCKERFILE=./Dockerfile \
+#               SBOM_FRAGMENT=/path/to/static-web.cdx.json sh tests/smoke.sh
 set -eu
 
 BIN="${DARKHTTPD_BIN:-/src/darkhttpd}"
@@ -133,6 +138,33 @@ if [ "$after" != "smoke-ok" ]; then
   err "FAIL: server stopped serving after a malformed request"
   dump_server_log
   fail=1
+fi
+
+# --- 5. Embedded SBOM fragment: on this scratch image the fragment is the
+# release SBOM's ONLY component inventory (no package DB; UPX defeats binary
+# classifiers), so assert it ships correct — against the builder-staged file,
+# because the scratch final stage has no shell to run anything in. Pin the
+# final-stage COPY directive too, so "present in the builder" cannot drift
+# apart from "shipped in the image". BusyBox has no jq, so assert shape with
+# head/tail and grep: non-empty, starts with { and ends with }.
+SBOM="${SBOM_FRAGMENT:-/src/static-web.cdx.json}"
+assert_docker_directive 'COPY --from=test /src/static-web.cdx.json /usr/share/sbom/static-web.cdx.json'
+if [ ! -s "$SBOM" ]; then
+  err "FAIL: embedded SBOM fragment missing or empty: $SBOM"
+  fail=1
+else
+  if [ "$(head -c 1 "$SBOM")" != "{" ] || [ "$(tail -c 2 "$SBOM")" != "}" ]; then
+    err "FAIL: embedded SBOM fragment is not a JSON object (bad first/last byte)"
+    fail=1
+  fi
+  grep -q '"name": "darkhttpd"' "$SBOM" || {
+    err "FAIL: embedded SBOM fragment does not name darkhttpd"
+    fail=1
+  }
+  grep -q '"version": "[0-9][0-9.]*"' "$SBOM" || {
+    err "FAIL: embedded SBOM fragment lacks a version-shaped component version"
+    fail=1
+  }
 fi
 
 [ "$fail" -eq 0 ] && log "static-web smoke: ok"

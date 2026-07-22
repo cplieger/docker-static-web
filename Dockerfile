@@ -103,6 +103,38 @@ RUN apk add --no-cache binutils \
  && { ! grep -q 'GNU_STACK.*RWE' /tmp/upx-seg || { printf '%s\n' 'FAIL: packed stub stack is RWE (executable)' >&2; cat /tmp/upx-seg >&2; exit 1; }; } \
  && rm -f /tmp/upx-hdr /tmp/upx-seg
 
+# Embedded SBOM fragment. The final image is scratch — no APK database — and
+# UPX packing defeats Syft's binary classifiers, so the signed release SBOM
+# would otherwise inventory NOTHING: darkhttpd would be invisible to SBOM
+# consumers and vulnerability scanners. Generate a CycloneDX fragment from
+# the same Renovate-tracked DARKHTTPD_VERSION ARG the build pins — a Renovate
+# bump keeps the SBOM correct with zero extra maintenance — and ship it in
+# the final image (see the COPY in the scratch stage) where Syft's
+# sbom-cataloger inventories *.cdx.json files from the squashed tree. The
+# cataloger is enabled centrally in the cplieger/ci release pipeline; no
+# per-repo .syft.yaml is needed. The purl mirrors the tarball provenance
+# above (GitHub tag archive of emikulic/darkhttpd). The CPE follows the NVD
+# CPE dictionary, where unix4lyfe:darkhttpd is the canonical vendor:product
+# pair — darkhttpd_project:darkhttpd is marked deprecated in its favor
+# (2024-01-31) and emikulic appears only as the project URL reference.
+RUN cat > /src/static-web.cdx.json <<EOF
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "components": [
+    {
+      "bom-ref": "pkg:github/emikulic/darkhttpd@${DARKHTTPD_VERSION}",
+      "type": "application",
+      "name": "darkhttpd",
+      "version": "${DARKHTTPD_VERSION#v}",
+      "purl": "pkg:github/emikulic/darkhttpd@${DARKHTTPD_VERSION}",
+      "cpe": "cpe:2.3:a:unix4lyfe:darkhttpd:${DARKHTTPD_VERSION#v}:*:*:*:*:*:*:*"
+    }
+  ]
+}
+EOF
+
 # ---------------------------------------------------------------------------
 # Test stage — runs the build-time smoke test against the final (stripped,
 # UPX-compressed) binary: it pins the shipped ENTRYPOINT/CMD/WORKDIR/USER
@@ -122,6 +154,12 @@ RUN DOCKERFILE=/tmp/Dockerfile sh /tmp/tests/smoke.sh
 FROM scratch
 
 COPY --from=test --chmod=755 /src/darkhttpd /darkhttpd
+# CycloneDX SBOM fragment for the source-built darkhttpd (generated in the
+# builder stage from the Renovate-tracked version ARG). scratch gives Syft no
+# package DB to read, so this file IS the image's component inventory —
+# placed where the sbom-cataloger (*.cdx.json) picks it up from the squashed
+# filesystem tree.
+COPY --from=test /src/static-web.cdx.json /usr/share/sbom/static-web.cdx.json
 
 WORKDIR /www
 EXPOSE 8567
