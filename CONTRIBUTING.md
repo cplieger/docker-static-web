@@ -24,20 +24,21 @@ easy to trip over.
 ## Bumping darkhttpd (the main gotcha)
 
 The `Dockerfile` pins both `DARKHTTPD_VERSION` and `DARKHTTPD_SHA256`, and
-verifies the tarball with `sha256sum -c` before extracting. **When you change
-`DARKHTTPD_VERSION`, you must update `DARKHTTPD_SHA256` in the same change**;
-otherwise the build fails the integrity check. Renovate bumps only the version
-ARG. It cannot recompute the tarball hash: the `github-tags` datasource exposes
-the git commit sha, not the archive's content hash, and the hosted Renovate app
-does not run `postUpgradeTasks`. An automated bump PR therefore carries a stale
-hash and fails that check until you update the SHA by hand; no manual-approval
-gate holds it back. To make the fix a single mechanical step,
-a `packageRule` in the central `cplieger/.github` Renovate preset (this repo's
-`renovate.json` only extends it) labels the bump PR `manual-sha-bump` and embeds
-the recompute command in the PR body. Once you push the corrected SHA the build
-goes green and the PR auto-merges.
+verifies the tarball with `sha256sum -c` before extracting, so a stale hash
+fails the build. Renovate bumps only the version ARG: the `github-tags`
+datasource exposes the git commit sha, not the archive's content hash. The
+`# repin:` marker comment above `DARKHTTPD_SHA256` closes that gap. It names the
+dep and the artifact URL, and the `postUpgradeTasks` rule in the central
+`cplieger/.github` Renovate preset (this repo's `renovate.json` only extends it)
+recomputes the hash right after the version bump and folds it into the same
+commit. A bump PR therefore arrives with a correct hash and auto-merges with no
+contributor step. If the recompute ever fails, Renovate reports it in the PR
+body and the `sha256sum -c` check keeps the build red instead of merging a bad
+pin.
 
-Compute the new hash with:
+The automated recompute runs on Renovate's own bumps. **If you change
+`DARKHTTPD_VERSION` by hand, update `DARKHTTPD_SHA256` in the same change**;
+otherwise the build fails the integrity check. Compute the new hash with:
 
 ```bash
 curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz \
