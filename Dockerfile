@@ -3,11 +3,10 @@ FROM alpine:3.24.1@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6ee
 
 # renovate: datasource=github-tags depName=emikulic/darkhttpd
 ARG DARKHTTPD_VERSION=v1.17
-# When DARKHTTPD_VERSION is bumped, update this SHA256 to match the new tarball.
-# Renovate can't recompute it (github-tags exposes the git sha, not the archive
-# hash), so it labels the bump PR `manual-sha-bump` and puts this command in the
-# PR body — run it, paste the result here, push:
-# curl -sL https://github.com/emikulic/darkhttpd/archive/refs/tags/v<N>.tar.gz | sha256sum
+# github-tags exposes the git commit sha, not the sha256 of the archive that
+# `sha256sum -c` verifies below, so a version bump cannot carry this value; the
+# repin postUpgradeTask recomputes it from the marker below in the same commit.
+# repin: dep=emikulic/darkhttpd url=https://github.com/emikulic/darkhttpd/archive/refs/tags/{version}.tar.gz
 ARG DARKHTTPD_SHA256=4fee9927e2d8bb0a302f0dd62f9ff1e075748fa9f5162c9481a7a58b41462b56
 
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
