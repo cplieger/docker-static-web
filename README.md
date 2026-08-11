@@ -144,7 +144,7 @@ All dependencies are updated automatically via [Renovate](https://github.com/ren
 
 ## Credits
 
-This project packages [darkhttpd](https://github.com/emikulic/darkhttpd) by [@emikulic](https://github.com/emikulic) into a `scratch`-based container. All credit for the web server itself goes to the upstream maintainer; darkhttpd has been "small, secure, and fast" since 2003.
+This project packages [darkhttpd](https://github.com/emikulic/darkhttpd) (ISC) by [@emikulic](https://github.com/emikulic) into a `scratch`-based container. All credit for the web server itself goes to the upstream maintainer; darkhttpd has been "small, secure, and fast" since 2003.
 
 ## Contributing
 
@@ -158,4 +158,4 @@ This project was built with AI-assisted tooling using [Claude](https://claude.co
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE).
