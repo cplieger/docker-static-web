@@ -1,5 +1,17 @@
 # docker-static-web
 
+> **Archived. This image is no longer maintained.**
+>
+> The published images stay available and still work: `ghcr.io/cplieger/docker-static-web` and
+> `docker.io/cplieger/docker-static-web`. There are no further darkhttpd bumps, no dependency
+> updates and no security fixes, so treat the last release as final and pin to a digest if you
+> depend on it.
+>
+> What replaced it: a reverse proxy that already serves files. Caddy's `file_server` and nginx's
+> `root` do the same job with no second container. For a maintained standalone server, go to
+> [darkhttpd](https://github.com/emikulic/darkhttpd) directly; this image was only a ~30 KB
+> packaging of it.
+
 [![Image Size](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/docker-static-web/badges/size.json)](https://github.com/cplieger/docker-static-web/pkgs/container/docker-static-web)
 ![Platforms](https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-blue)
 ![base: scratch](https://img.shields.io/badge/base-scratch-2496ED?logo=docker)
